@@ -9,6 +9,9 @@ import akka.actor.ActorRef;
 import java.util.logging.Logger;
 import java.util.List;
 import java.util.ArrayList;
+import keyValueStore.msg.CrashMessage;
+import keyValueStore.msg.LaunchMessage;
+import java.util.Collections;
 
 // KeyValueStore imports
 import keyValueStore.msg.ReferencesMessage;
@@ -22,16 +25,22 @@ public class Main {
 
         /* Validate numProcesses arg */
         int numProcesses = -1;
+        int numCrashed   = -1;
         try {
             numProcesses = Integer.parseInt(args[0]);
+            numCrashed   = Integer.parseInt(args[1]);
             if (numProcesses < 0) {
                 throw new IllegalArgumentException("First argument (no of processes) must be a positive integer.");
             }
+            if (numCrashed < 0 || numCrashed >= numProcesses) {
+                throw new IllegalArgumentException("Second argument (no of crashed processes) must be a non-negative integer less than the number of processes.");
+            }
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("First argument must be a valid integer.", e);
+            throw new IllegalArgumentException("Arguments must be valid integers.", e);
         }
 
         LOGGER.config("The number of processes: " + numProcesses);
+        LOGGER.config("The number of crashed processes: " + numCrashed);
 
         /* Create the Actor System in AKKA
             - create numProcesses actors
@@ -44,7 +53,7 @@ public class Main {
         for (int i = 0; i < numProcesses; i++) {
             Props process = Process.createActor();
             try {
-                ActorRef processRef = system.actorOf(process, "Process" + i);
+                ActorRef processRef = system.actorOf(process, "p" + i);
                 processRefs.add(processRef);
                 LOGGER.info("Created actor Process" + i);
             } catch (Exception e) {
@@ -58,6 +67,17 @@ public class Main {
             processRef.tell(referencesMessage, ActorRef.noSender());
         }
 
-        
+        /* Crash random processes */
+		List<ActorRef> toCrash = new ArrayList<>(processRefs);
+		Collections.shuffle(toCrash);
+
+		for (int i = 0; i < numCrashed; i++)
+			toCrash.get(i).tell(new CrashMessage(), ActorRef.noSender());
+
+		/* Launch the other processes */
+		LaunchMessage launch = new LaunchMessage();
+
+		for (int i = numCrashed; i < numProcesses; i++)
+			toCrash.get(i).tell(launch, ActorRef.noSender());
     }
 }
