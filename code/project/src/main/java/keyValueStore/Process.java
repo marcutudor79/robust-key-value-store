@@ -1,0 +1,184 @@
+package keyValueStore;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import akka.actor.ActorRef;
+import akka.actor.AbstractActor;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
+import akka.actor.Props;
+
+import keyValueStore.msg.ReferencesMessage;
+import keyValueStore.msg.CrashMessage;
+import keyValueStore.msg.LaunchMessage;
+import keyValueStore.msg.ReadRequest;
+import keyValueStore.msg.WriteRequest;
+import keyValueStore.msg.ProcessMessage;
+
+public class Process extends AbstractActor {
+	private int localValue = 0;
+	private int localTimestamp = 0;
+	private int timestamp = 0;
+	private List<ActorRef> actorRefList;
+	private int N;
+	private final int M = 3;
+
+	private Integer[] writeValue;
+	private int v;
+	private int operationsCompleted = 0;
+
+	private boolean isCrashed = false;
+	private boolean isLaunched = false;
+	private int sequenceNumber = 0;
+	private int currentOpTimestamp;
+
+	private boolean isWrite;
+	private int ackCount;
+	private List<ProcessMessage> readResponses = new ArrayList<>();
+	private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+
+	public Process(){
+		actorRefList = new ArrayList<>();
+		writeValue = new Integer[M];
+
+		//processes are called p + integer
+		int processNumber = Integer.parseInt(self().path().name().substring(1));
+		for(int j = 0; j < M; j++){
+			writeValue[j] = j*N + processNumber;
+		}
+	}
+
+	public static Props createActor() {
+		return Props.create(Process.class, () -> {
+			return new Process();
+		});
+	}
+
+	@Override
+	public Receive createReceive() {
+		return receiveBuilder()
+				.match(ReferencesMessage.class, this::updateReference)
+				.match(CrashMessage.class, this::onCrash)
+				.match(LaunchMessage.class, this::onLaunch)
+				.match(ReadRequest.class, this::onReadRequest)
+				.match(ProcessMessage.class, this::onReadResponse)
+				.match(WriteRequest.class, this::onWriteRequest)
+				.match(Ack.class, this::onAck)
+				.build();
+	}
+
+	public void updateReference(ReferencesMessage ref){
+		actorRefList = ref.getReferences();
+		N = actorRefList.size();
+	}
+
+	public void onCrash(CrashMessage message){
+		isCrashed = true;
+		log.info("process crashed");
+	}
+
+	public void onLaunch(LaunchMessage message){
+		if(isCrashed)	return;
+		isLaunched = true;
+		startOperation();
+	}
+
+	public void onReadRequest(ReadRequest message){
+		if(isCrashed)	return;
+		getSender().tell(new ProcessMessage(localValue,
+						localTimestamp, message.getSequenceNumber()), self());
+	}
+
+	public void onReadResponse(ProcessMessage message) {
+		if(isCrashed || !isLaunched)	return;
+		if(message.getSequenceNumber() != sequenceNumber)	return;
+		int sendValue;
+		int sendTimestamp;
+		readResponses.add(message);
+
+		if(readResponses.size() == N/2 + 1){
+			int maxTs = Integer.MIN_VALUE;
+			int maxVal = Integer.MIN_VALUE;
+
+			for(ProcessMessage m: readResponses){
+				if(m.getTimestamp() > maxTs){
+					maxTs = m.getTimestamp();
+					maxVal = m.getValue();
+				} else if (m.getTimestamp() == maxTs && m.getValue() > maxVal) {
+                    maxVal = m.getValue();
+                }
+			}
+
+			if(isWrite){
+				timestamp = maxTs + 1;
+				sendTimestamp = timestamp;
+				sendValue = v;
+			} else {
+				sendTimestamp = maxTs;
+				sendValue = maxVal;
+			}
+
+			currentOpTimestamp = sendTimestamp;
+			broadcastMessage(new WriteRequest(sendValue, sendTimestamp));
+
+		}
+	}
+
+	public void onWriteRequest(WriteRequest message){
+		if(isCrashed)	return;
+		int timestampReq = message.getTimestamp();
+		int valueReq = message.getValue();
+
+		if((timestampReq > localTimestamp) ||
+			(timestampReq == localTimestamp && valueReq > localValue))
+		{
+			localValue = valueReq;
+			localTimestamp = timestampReq;
+		}
+
+		getSender().tell(new Ack(valueReq, timestampReq), self());
+	}
+
+	public void onAck(Ack ack){
+		if (isCrashed || !isLaunched) return;
+		if (ack.getTimestamp() != currentOpTimestamp)	return;
+
+		ackCount++;
+
+
+        if (ackCount == (N / 2) + 1) {
+            operationsCompleted++;
+            ackCount = -1;
+            startOperation();
+        }
+	}
+
+	private void startOperation(){
+		if(operationsCompleted == M*2){
+			log.info("all operations completed");
+			return;
+		}
+		ackCount = 0;
+
+		if(operationsCompleted < M){
+			isWrite = true;
+			v = writeValue[operationsCompleted];
+		}
+		else
+			isWrite = false;
+
+		readResponses.clear();
+		sequenceNumber++;
+		ReadRequest req = new ReadRequest(sequenceNumber);
+
+		broadcastMessage(req);
+
+	}
+
+	private void broadcastMessage(Object msg){
+		for (ActorRef actor : actorRefList) {
+			actor.tell(msg, self());
+		}
+	}
+}
