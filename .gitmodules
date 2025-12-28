@@ -1,0 +1,3 @@
+[submodule "code/example/SLR210Patterns"]
+	path = code/example/SLR210Patterns
+	url = https://github.com/remisharrock/SLR210Patterns.git
