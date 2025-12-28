@@ -2,6 +2,12 @@
 
 This is a project in which a multi-actor key-value store system is implemented. It is based on the AKKA frawework.
 
+# Getting started
+Please clone this repository taking into account the submodules:
+```
+git clone <url> --recurse-submodules
+```
+
 # Prerequisites (Ubuntu 24.04 LTS)
 - Java >= 21
 ```
@@ -21,6 +27,12 @@ This is a project in which a multi-actor key-value store system is implemented. 
 ```
 
 Then follow the instrunctions from https://doc.akka.io/getting-started/starthere.html to see if a starting sample builds and runs.
+
+# Akka resumed
+Akka actors - higher level of abstraction for writing concurrent distributed systems. It alleviates the developer from having to deal with explicit locking and thread management.
+
+1. How to create an actor
+---
 
 # Contributors
 
