@@ -15,11 +15,12 @@ public class Process extends AbstractActor {
 	private int timestamp = 0;
 	private List<ActorRef> actorRefList;
 	private int N;
-	private final int M = 3;
+	private final int M = 5;
 
 	private Integer[] writeValue;
 	private int v;
 	private int operationsCompleted = 0;
+	private int readenValue;
 
 	private boolean isCrashed = false;
 	private boolean isLaunched = false;
@@ -29,17 +30,25 @@ public class Process extends AbstractActor {
 	private boolean isWrite;
 	private int ackCount;
 	private List<ProcessMessage> readResponses = new ArrayList<>();
+
+	// for logger
+	private int processNumber;
+	private String processName;
 	private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+	private long operationStartTime;
+
 
 	public Process(){
 		actorRefList = new ArrayList<>();
 		writeValue = new Integer[M];
 
 		//processes are called p + integer
-		int processNumber = Integer.parseInt(self().path().name().substring(1));
-		for(int j = 0; j < M; j++){
-			writeValue[j] = j*N + processNumber;
-		}
+		processNumber = Integer.parseInt(self().path().name().substring(1));
+		//moved in the updateRef method where I compute N
+		// for(int j = 0; j < M; j++){
+		// 	writeValue[j] = j*N + processNumber;
+		// }
+		processName = "p" + processNumber;
 	}
 
 	public static Props createActor() {
@@ -64,11 +73,14 @@ public class Process extends AbstractActor {
 	public void updateReference(ReferencesMessage ref){
 		actorRefList = ref.getReferences();
 		N = actorRefList.size();
+		for(int j = 0; j < M; j++){
+			writeValue[j] = j*N + processNumber;
+		}
 	}
 
 	public void onCrash(CrashMessage message){
 		isCrashed = true;
-		log.info("process crashed");
+		log.info(processName + ": " + "process crashed");
 	}
 
 	public void onLaunch(LaunchMessage message){
@@ -110,6 +122,7 @@ public class Process extends AbstractActor {
 			} else {
 				sendTimestamp = maxTs;
 				sendValue = maxVal;
+				readenValue = sendValue;
 			}
 
 			currentOpTimestamp = sendTimestamp;
@@ -138,29 +151,39 @@ public class Process extends AbstractActor {
 		if (ack.getTimestamp() != currentOpTimestamp)	return;
 		
 		ackCount++;
-        
 
         if (ackCount == (N / 2) + 1) {
+			long timeSpent = System.nanoTime() - operationStartTime;
+			if (isWrite) {
+            	log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns");
+			} else {
+				log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns");
+			}
+
             operationsCompleted++;
             ackCount = -1;
             startOperation();
         }
 	}
 
-	private void startOperation(){
+	private void startOperation(){		
 		if(operationsCompleted == M*2){
-			log.info("all operations completed");
+			log.info(processName + ": " + "all operations completed");
 			return;
 		}
 		ackCount = 0;
 
+		operationStartTime = System.nanoTime();
+
 		if(operationsCompleted < M){
 			isWrite = true;
 			v = writeValue[operationsCompleted];
+			log.info(processName + ": " + "Invoke write");
 		}
-		else
+		else {
 			isWrite = false;
-
+			log.info(processName + ": " + "Invoke read");
+		}
 		readResponses.clear();
 		sequenceNumber++;
 		ReadRequest req = new ReadRequest(sequenceNumber);
