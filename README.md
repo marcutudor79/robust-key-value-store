@@ -28,11 +28,18 @@ git clone <url> --recurse-submodules
 
 Then follow the instrunctions from https://doc.akka.io/getting-started/starthere.html to see if a starting sample builds and runs.
 
-# Akka resumed
+# Akka framework overview
 Akka actors - higher level of abstraction for writing concurrent distributed systems. It alleviates the developer from having to deal with explicit locking and thread management.
 
-1. How to create an actor
----
+1. ActorSystem: container for actors, manages their lifecycle, provides configuration, logging, etc. https://doc.akka.io/libraries/akka-core/current/general/actor-systems.html
+2. Actor: processing unit that can communicate with others via messages. https://doc.akka.io/libraries/akka-core/current/general/actors.html
+   - Contain:
+        - State (not accesible from outside)
+        - Behavior (not accesible from outside) - defines how a message shall be processed
+        - Mailbox (accesible via reference) - where other actors send messages. Piece that connects receiver with sender. FIFO by default.
+        -  Child Actors - can delegate subtasks to them.
+   - Has:
+        - ActorReference: unique address to send messages to an actor, to restart it, etc.
 
 # Contributors
 
