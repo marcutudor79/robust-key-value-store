@@ -19,9 +19,10 @@ import keyValueStore.msg.ProcessMessage;
 
 /* 3.REQ Use the name Process for the process class */
 public class Process extends AbstractActor {
-	private int localValue = 0;
-	private int localTimestamp = 0;
-	private int timestamp = 0;
+	private int localValue = 0; // line 1
+	private int localTimestamp = 0; // line 2
+	private int timestamp = 0; // line 3
+	private int sequenceNumber = 0; // line 4
 	private List<ActorRef> actorRefList;
 	private int N;
 	private int M = 49; // default to the max number of operations per process
@@ -33,7 +34,6 @@ public class Process extends AbstractActor {
 
 	private boolean isCrashed = false;
 	private boolean isLaunched = false;
-	private int sequenceNumber = 0;
 	private int currentOpTimestamp;
 
 	private boolean isWrite;
@@ -99,63 +99,76 @@ public class Process extends AbstractActor {
 	public void onLaunch(LaunchMessage message){
 		if(isCrashed)	return;
 		isLaunched = true;
+		/*8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
+			- M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
+			- M get operations for k = 1 */
 		startOperation();
 	}
 
+	// line 28
 	public void onReadRequest(ReadRequest message){
 		if(isCrashed)	return;
+		// line 29
 		getSender().tell(new ProcessMessage(localValue,
 						localTimestamp, message.getSequenceNumber()), self());
 	}
 
+	// lines 9 to 12 and 18 to 20
 	public void onReadResponse(ProcessMessage message) {
 		if(isCrashed || !isLaunched)	return;
 		if(message.getSequenceNumber() != sequenceNumber)	return;
 		int sendValue;
 		int sendTimestamp;
+
+		// lines 9 and 18
 		readResponses.add(message);
 
+		// majority reached lines 9 and 18
 		if(readResponses.size() == N/2 + 1){
 			int maxTs = Integer.MIN_VALUE;
 			int maxVal = Integer.MIN_VALUE;
 
 			for(ProcessMessage m: readResponses){
 				if(m.getTimestamp() > maxTs){
-					maxTs = m.getTimestamp();
-					maxVal = m.getValue();
+					maxTs = m.getTimestamp(); // lines 10 and 19
+					maxVal = m.getValue(); // line 19
 				} else if (m.getTimestamp() == maxTs && m.getValue() > maxVal) {
-                    maxVal = m.getValue();
+                    maxVal = m.getValue(); // line 19
                 }
 			}
 
 			if(isWrite){
-				timestamp = maxTs + 1;
-				sendTimestamp = timestamp;
-				sendValue = v;
+				timestamp = maxTs + 1; // line 11
+				sendTimestamp = timestamp; // line 12
+				sendValue = v; // line 12
 			} else {
-				sendTimestamp = maxTs;
-				sendValue = maxVal;
-				readenValue = sendValue;
+				sendTimestamp = maxTs; // line 20
+				sendValue = maxVal; // line 20
+				readenValue = sendValue; 
 			}
 
 			currentOpTimestamp = sendTimestamp;
+			// lines 12 and 20
 			broadcastMessage(new WriteRequest(sendValue, sendTimestamp));
 
 		}
 	}
 
+	// line 23
 	public void onWriteRequest(WriteRequest message){
 		if(isCrashed)	return;
 		int timestampReq = message.getTimestamp();
 		int valueReq = message.getValue();
 
+		// line 24
 		if((timestampReq > localTimestamp) ||
-			(timestampReq == localTimestamp && valueReq > localValue))
+			(timestampReq == localTimestamp && valueReq > localValue)) 
 		{
-			localValue = valueReq;
-			localTimestamp = timestampReq;
+			localValue = valueReq; // line 25
+			localTimestamp = timestampReq; //line 26
 		}
 
+		// line 27
 		getSender().tell(new Ack(valueReq, timestampReq), self());
 	}
 
@@ -165,21 +178,31 @@ public class Process extends AbstractActor {
 
 		ackCount++;
 
+		// lines 13 and 21
         if (ackCount == (N / 2) + 1) {
 			long timeSpent = System.nanoTime() - operationStartTime;
 			if (isWrite) {
+				// line 14
             	log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns");
 			} else {
+				//line 22
 				log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns");
 			}
 
             operationsCompleted++;
             ackCount = -1;
+			
+			/*8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
+			- M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
+			- M get operations for k = 1 */
             startOperation();
         }
 	}
 
 	private void startOperation(){
+		/*8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
+			- M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
+			- M get operations for k = 1 */
 		if(operationsCompleted == M*2){
 			log.info(processName + ": " + "all operations completed");
 			return;
@@ -198,11 +221,11 @@ public class Process extends AbstractActor {
 			log.info(processName + ": " + "Invoke read");
 		}
 		readResponses.clear();
-		sequenceNumber++;
+		sequenceNumber++; // lines 7 and 16
+
+		// lines 8 and 17
 		ReadRequest req = new ReadRequest(sequenceNumber);
-
 		broadcastMessage(req);
-
 	}
 
 	private void broadcastMessage(Object msg){
