@@ -25,6 +25,9 @@ public class Main {
     public static void main(String[] args) {
 
         /* Validate arguments */
+        /* 10.1 REQ take f, M as arguments
+            f = numCrashed
+            M = numOperations */
         int numProcesses  = -1;
         int numCrashed    = -1;
         int numOperations = -1;
