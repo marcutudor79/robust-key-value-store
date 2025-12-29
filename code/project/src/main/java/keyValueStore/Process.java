@@ -27,9 +27,12 @@ public class Process extends AbstractActor {
 	private int N;
 	private int M = 49; // default to the max number of operations per process
 
+	// pre-calculated values to be written during the put operations
 	private Integer[] writeValue;
+	// the specific value currently being written
 	private int v;
 	private int operationsCompleted = 0;
+	// buffer to hold the value read during a get operation
 	private int readenValue;
 
 	private boolean isCrashed = false;
@@ -51,12 +54,9 @@ public class Process extends AbstractActor {
 		actorRefList = new ArrayList<>();
 		writeValue = new Integer[M];
 
-		//processes are called p + integer
+		// processes are called p + integer
+		/* the processes are named "p" + number of the process */ 
 		processNumber = Integer.parseInt(self().path().name().substring(1));
-		//moved in the updateRef method where I compute N
-		// for(int j = 0; j < M; j++){
-		// 	writeValue[j] = j*N + processNumber;
-		// }
 		processName = "p" + processNumber;
 	}
 
@@ -82,6 +82,7 @@ public class Process extends AbstractActor {
 				.build();
 	}
 
+	// Receives the reference list of all other processes to establish connectivity
 	public void updateReference(ReferencesMessage ref){
 		actorRefList = ref.getReferences();
 		N = actorRefList.size();
@@ -106,6 +107,8 @@ public class Process extends AbstractActor {
 	}
 
 	// line 28
+	/*upon received [?,r] the processes responds with
+	 the current local value and timestamp */
 	public void onReadRequest(ReadRequest message){
 		if(isCrashed)	return;
 		// line 29
@@ -114,6 +117,9 @@ public class Process extends AbstractActor {
 	}
 
 	// lines 9 to 12 and 18 to 20
+	/* Collects local values and timestamps from peers.
+	Once a majority is reached, it determines the most recent value
+	(i.e., the highest timestamp) and broadcasts the write request. */
 	public void onReadResponse(ProcessMessage message) {
 		if(isCrashed || !isLaunched)	return;
 		if(message.getSequenceNumber() != sequenceNumber)	return;
@@ -155,6 +161,9 @@ public class Process extends AbstractActor {
 	}
 
 	// line 23
+	/* Upon receiving [v', t'], it updates the local storage if the
+	incoming request is newer than the currently stored value.
+	It then sends back an ACK for the new variables. */
 	public void onWriteRequest(WriteRequest message){
 		if(isCrashed)	return;
 		int timestampReq = message.getTimestamp();
@@ -172,6 +181,8 @@ public class Process extends AbstractActor {
 		getSender().tell(new Ack(valueReq, timestampReq), self());
 	}
 
+	/* Counts ACKs to verify that the value has been safely stored on a majority of nodes.
+	 and print the return value*/
 	public void onAck(Ack ack){
 		if (isCrashed || !isLaunched) return;
 		if (ack.getTimestamp() != currentOpTimestamp)	return;
@@ -199,6 +210,7 @@ public class Process extends AbstractActor {
         }
 	}
 
+	// it starts the next operation
 	private void startOperation(){
 		/*8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
 			- M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
