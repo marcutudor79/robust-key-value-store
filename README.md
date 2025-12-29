@@ -13,7 +13,7 @@ git clone <url> --recurse-submodules
 ```
     sudo apt install openjdk-21-jdk
 ```
-- Apache Maven >= 3.9
+- Apache Maven >= 3.8.7.2
 ```
     sudo apt install maven=3.8.7-2
 ```
@@ -24,6 +24,10 @@ git clone <url> --recurse-submodules
 - Akka cli
 ``` bash
     curl -sL https://doc.akka.io/install-cli.sh | bash
+```
+- Make
+```
+    sudo apt install make
 ```
 
 Then follow the instrunctions from https://doc.akka.io/getting-started/starthere.html to see if a starting sample builds and runs.
@@ -40,6 +44,14 @@ Akka actors - higher level of abstraction for writing concurrent distributed sys
         -  Child Actors - can delegate subtasks to them.
    - Has:
         - ActorReference: unique address to send messages to an actor, to restart it, etc.
+
+# Running the project
+To build and run the project, navigate to the `code/project` directory and execute the following
+commands:
+
+```bash
+make
+```
 
 # Contributors
 
