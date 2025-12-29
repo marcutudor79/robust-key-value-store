@@ -88,5 +88,12 @@ public class Main {
 
 		for (int i = numCrashed; i < numProcesses; i++)
 			toCrash.get(i).tell(launch, ActorRef.noSender());
+
+        try {
+            system.terminate();
+            system.getWhenTerminated().toCompletableFuture().get();
+        } catch (Exception e) {
+            LOGGER.severe("Error during ActorSystem termination: " + e.getMessage());
+        }
     }
 }
