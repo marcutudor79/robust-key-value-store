@@ -28,4 +28,4 @@ jobs:
         distribution: 'temurin'
         cache: maven
     - name: Build with Maven
-      run: mvn -B exec:java --file code/project/pom.xml
+      run: mvn -B exec:java -e --file code/project/pom.xml
