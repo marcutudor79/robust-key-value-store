@@ -26,7 +26,7 @@ public class Process extends AbstractActor {
     private int timestamp = 0;
     private List<ActorRef> actorRefList;
     private int N;
-    private int M = 49; 
+    private int M = 49;
 
     private Integer[] writeValue;
     private int v;
@@ -36,16 +36,16 @@ public class Process extends AbstractActor {
     private boolean isCrashed = false;
     private boolean isLaunched = false;
     private int sequenceNumber = 0;
-    
+
     // Track CURRENT operation details to verify Acks
     private int currentOpTimestamp;
     private int currentOpValue; // ADDED: To verify Ack value
 
     private boolean isWrite;
-    
+
     // REPLACED 'int ackCount' with Set to handle duplicates/robustness
-    private Set<ActorRef> ackSenders = new HashSet<>(); 
-    
+    private Set<ActorRef> ackSenders = new HashSet<>();
+
     // REPLACED List-only logic with Set to handle duplicates
     private List<ProcessMessage> readResponses = new ArrayList<>();
     private Set<ActorRef> readResponseSenders = new HashSet<>();
@@ -92,10 +92,11 @@ public class Process extends AbstractActor {
     }
 
     /* 6.REQ Upon receiving the CrashMessage, the process enters silent mode */
-    public void onCrash(CrashMessage message){
-        isCrashed = true;
-        log.info(processName + ": " + "process crashed");
-    }
+	public void onCrash(CrashMessage message){
+		isCrashed = true;
+		log.info(processName + ": " + "process crashed");
+        getContext().stop(self()); // Terminate this actor
+	}
 
     public void onLaunch(LaunchMessage message){
         if(isCrashed) return;
@@ -169,10 +170,10 @@ public class Process extends AbstractActor {
 
     public void onAck(Ack ack){
         if (isCrashed || !isLaunched) return;
-        
+
         // FIXED: Validate Timestamp AND Value (Safety Violation Fix)
         if (ack.getTimestamp() != currentOpTimestamp) return;
-        if (ack.getValue() != currentOpValue) return; 
+        if (ack.getValue() != currentOpValue) return;
 
         // FIXED: Count unique senders only (Robustness Fix)
         if (ackSenders.contains(getSender())) return;
@@ -192,14 +193,13 @@ public class Process extends AbstractActor {
         }
     }
 
-    private void startOperation(){
-        if(operationsCompleted == M*2){
-            log.info(processName + ": " + "all operations completed");
-            return;
-        }
-        
-        // Reset trackers
-        ackSenders.clear();
+	private void startOperation(){
+		if(operationsCompleted == M*2){
+			log.info(processName + ": " + "all operations completed");
+            getContext().stop(self()); // Terminate this actor
+			return;
+		}
+		ackSenders.clear();
         readResponses.clear();
         readResponseSenders.clear();
 
@@ -213,7 +213,7 @@ public class Process extends AbstractActor {
             isWrite = false;
             log.info(processName + ": " + "Invoke read");
         }
-        
+
         sequenceNumber++;
         ReadRequest req = new ReadRequest(sequenceNumber);
 
@@ -228,7 +228,7 @@ public class Process extends AbstractActor {
 
     public void updateOperations(OperationsMessage msg) {
         this.M = msg.getNumOperations();
-        
+
         // FIXED: Initialize array here with the correct M
         writeValue = new Integer[M];
         for(int j = 0; j < M; j++){
@@ -236,7 +236,7 @@ public class Process extends AbstractActor {
             // processNumber is 'i', j is 'k'
             writeValue[j] = j * N + processNumber;
         }
-        
+
         log.info("Updated number of operations to " + M);
     }
 }
