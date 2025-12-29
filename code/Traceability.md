@@ -12,7 +12,7 @@
 
 - [x] 7.REQ Main class sends a LaunchMessage to all non-crashed processes
 
-- [?] 8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
+- [x] 8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
     - M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
     - M get operations for k = 1
 
