@@ -12,6 +12,7 @@ import akka.actor.Props;
 import keyValueStore.msg.ReferencesMessage;
 import keyValueStore.msg.CrashMessage;
 import keyValueStore.msg.LaunchMessage;
+import keyValueStore.msg.OperationsMessage;
 import keyValueStore.msg.ReadRequest;
 import keyValueStore.msg.WriteRequest;
 import keyValueStore.msg.ProcessMessage;
@@ -23,7 +24,7 @@ public class Process extends AbstractActor {
 	private int timestamp = 0;
 	private List<ActorRef> actorRefList;
 	private int N;
-	private final int M = 3;
+	private int M = 49; // default to the max number of operations per process
 
 	private Integer[] writeValue;
 	private int v;
@@ -68,6 +69,7 @@ public class Process extends AbstractActor {
 				 /* 4.REQ Process class creates methods for executing put and get operations */
                 .match(WriteRequest.class, this::onWriteRequest)
 				.match(Ack.class, this::onAck)
+                .match(OperationsMessage.class, this::updateOperations)
 				.build();
 	}
 
@@ -185,4 +187,9 @@ public class Process extends AbstractActor {
 			actor.tell(msg, self());
 		}
 	}
+
+    public void updateOperations(OperationsMessage msg) {
+        this.M = msg.getNumOperations();
+        log.info("Updated number of operations to " + M);
+    }
 }

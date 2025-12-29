@@ -8,7 +8,7 @@ compile:
 	${MAVEN} clean compile
 
 run:
-	${MAVEN} exec:java -Dexec.mainClass="keyValueStore.Main" -Dexec.args="10 4"
+	${MAVEN} exec:java -Dexec.mainClass="keyValueStore.Main" -Dexec.args="10 4 3"
 
 clean:
 	rm -rf target/*
