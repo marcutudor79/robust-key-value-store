@@ -21,12 +21,12 @@ import keyValueStore.msg.ProcessMessage;
 
 /* 3.REQ Use the name Process for the process class */
 public class Process extends AbstractActor {
-    private int localValue = 0;
-    private int localTimestamp = 0;
-    private int timestamp = 0;
-    private List<ActorRef> actorRefList;
-    private int N;
-    private int M = 49;
+	private int localValue = 0; // line 1
+	private int localTimestamp = 0; // line 2
+	private int timestamp = 0; // line 3
+	private List<ActorRef> actorRefList;
+	private int N;
+	private int M = 49; // default to the max number of operations per process
 
     private Integer[] writeValue;
     private int v;
@@ -35,7 +35,7 @@ public class Process extends AbstractActor {
 
     private boolean isCrashed = false;
     private boolean isLaunched = false;
-    private int sequenceNumber = 0;
+    private int sequenceNumber = 0; // line 4
 
     // Track CURRENT operation details to verify Acks
     private int currentOpTimestamp;
@@ -98,75 +98,87 @@ public class Process extends AbstractActor {
         getContext().stop(self()); // Terminate this actor
 	}
 
-    public void onLaunch(LaunchMessage message){
-        if(isCrashed) return;
-        isLaunched = true;
-        startOperation();
-    }
+	public void onLaunch(LaunchMessage message){
+		if(isCrashed)	return;
+		isLaunched = true;
+		/*8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
+			- M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
+			- M get operations for k = 1 */
+		startOperation();
+	}
 
-    public void onReadRequest(ReadRequest message){
-        if(isCrashed) return;
-        getSender().tell(new ProcessMessage(localValue,
-                        localTimestamp, message.getSequenceNumber()), self());
-    }
+	// line 28
+	public void onReadRequest(ReadRequest message){
+		if(isCrashed)	return;
+		// line 29
+		getSender().tell(new ProcessMessage(localValue,
+						localTimestamp, message.getSequenceNumber()), self());
+	}
 
-    public void onReadResponse(ProcessMessage message) {
-        if(isCrashed || !isLaunched) return;
-        if(message.getSequenceNumber() != sequenceNumber) return;
+	// lines 9 to 12 and 18 to 20
+	public void onReadResponse(ProcessMessage message) {
+		if(isCrashed || !isLaunched)	return;
+		if(message.getSequenceNumber() != sequenceNumber)	return;
 
         // FIXED: Count unique senders only
         if (readResponseSenders.contains(getSender())) return;
         readResponseSenders.add(getSender());
         readResponses.add(message);
 
-        // FIXED: Use logic "> N/2" (Majority)
-        if(readResponseSenders.size() == (N / 2) + 1){
-            int maxTs = Integer.MIN_VALUE;
-            int maxVal = Integer.MIN_VALUE;
+		// lines 9 and 18
+		readResponses.add(message);
 
-            for(ProcessMessage m: readResponses){
-                if(m.getTimestamp() > maxTs){
-                    maxTs = m.getTimestamp();
-                    maxVal = m.getValue();
-                } else if (m.getTimestamp() == maxTs && m.getValue() > maxVal) {
-                    maxVal = m.getValue();
+		// majority reached lines 9 and 18
+		if(readResponses.size() == N/2 + 1){
+			int maxTs = Integer.MIN_VALUE;
+			int maxVal = Integer.MIN_VALUE;
+
+			for(ProcessMessage m: readResponses){
+				if(m.getTimestamp() > maxTs){
+					maxTs = m.getTimestamp(); // lines 10 and 19
+					maxVal = m.getValue(); // line 19
+				} else if (m.getTimestamp() == maxTs && m.getValue() > maxVal) {
+                    maxVal = m.getValue(); // line 19
                 }
             }
 
             int sendValue;
             int sendTimestamp;
 
-            if(isWrite){
-                timestamp = maxTs + 1;
-                sendTimestamp = timestamp;
-                sendValue = v;
-            } else {
-                sendTimestamp = maxTs;
-                sendValue = maxVal;
-                readenValue = sendValue;
-            }
+			if(isWrite){
+				timestamp = maxTs + 1; // line 11
+				sendTimestamp = timestamp; // line 12
+				sendValue = v; // line 12
+			} else {
+				sendTimestamp = maxTs; // line 20
+				sendValue = maxVal; // line 20
+				readenValue = sendValue;
+			}
 
-            currentOpTimestamp = sendTimestamp;
-            currentOpValue = sendValue; // <--- SAVE value to verify Ack later
+			currentOpTimestamp = sendTimestamp;
+			// lines 12 and 20
+			broadcastMessage(new WriteRequest(sendValue, sendTimestamp));
 
-            broadcastMessage(new WriteRequest(sendValue, sendTimestamp));
         }
     }
 
-    public void onWriteRequest(WriteRequest message){
-        if(isCrashed) return;
-        int timestampReq = message.getTimestamp();
-        int valueReq = message.getValue();
+	// line 23
+	public void onWriteRequest(WriteRequest message){
+		if(isCrashed)	return;
+		int timestampReq = message.getTimestamp();
+		int valueReq = message.getValue();
 
-        if((timestampReq > localTimestamp) ||
-            (timestampReq == localTimestamp && valueReq > localValue))
-        {
-            localValue = valueReq;
-            localTimestamp = timestampReq;
-        }
+		// line 24
+		if((timestampReq > localTimestamp) ||
+			(timestampReq == localTimestamp && valueReq > localValue))
+		{
+			localValue = valueReq; // line 25
+			localTimestamp = timestampReq; //line 26
+		}
 
-        getSender().tell(new Ack(valueReq, timestampReq), self());
-    }
+		// line 27
+		getSender().tell(new Ack(valueReq, timestampReq), self());
+	}
 
     public void onAck(Ack ack){
         if (isCrashed || !isLaunched) return;
@@ -180,11 +192,14 @@ public class Process extends AbstractActor {
         ackSenders.add(getSender());
 
         // FIXED: Use logic "> N/2" (Majority)
+        // lines 13 and 21
         if (ackSenders.size() == (N / 2) + 1) {
             long timeSpent = System.nanoTime() - operationStartTime;
             if (isWrite) {
+                // line 14
                 log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns");
             } else {
+                //line 22
                 log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns");
             }
 
@@ -194,6 +209,9 @@ public class Process extends AbstractActor {
     }
 
 	private void startOperation(){
+		/*8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
+			- M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
+			- M get operations for k = 1 */
 		if(operationsCompleted == M*2){
 			log.info(processName + ": " + "all operations completed");
             getContext().stop(self()); // Terminate this actor
@@ -219,7 +237,7 @@ public class Process extends AbstractActor {
             log.info(processName + ": " + "Invoke read");
         }
 
-        sequenceNumber++;
+        sequenceNumber++; // lines 7 and 16
         ReadRequest req = new ReadRequest(sequenceNumber);
 
         broadcastMessage(req);
