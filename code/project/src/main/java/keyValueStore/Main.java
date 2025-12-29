@@ -49,7 +49,7 @@ public class Main {
         final ActorSystem system = ActorSystem.create("KeyValueStoreSystem");
         List<akka.actor.ActorRef> processRefs = new ArrayList<>();
 
-
+        /* 1.REQ Main class creates N actors */
         for (int i = 0; i < numProcesses; i++) {
             Props process = Process.createActor();
             try {
@@ -61,20 +61,20 @@ public class Main {
             }
         }
 
-        /* Send references to the processes */
+        /* 2.REQ Main class passes references of all actors to each actor */
         ReferencesMessage referencesMessage = new ReferencesMessage(processRefs);
         for (ActorRef processRef : processRefs) {
             processRef.tell(referencesMessage, ActorRef.noSender());
         }
 
-        /* Crash random processes */
+        /* 5.REQ Main class selects F random processes then sends a special CrashMessage to each of them */
 		List<ActorRef> toCrash = new ArrayList<>(processRefs);
 		Collections.shuffle(toCrash);
 
 		for (int i = 0; i < numCrashed; i++)
 			toCrash.get(i).tell(new CrashMessage(), ActorRef.noSender());
 
-		/* Launch the other processes */
+		/* 7.REQ Main class sends a LaunchMessage to all non-crashed processes */
 		LaunchMessage launch = new LaunchMessage();
 
 		for (int i = numCrashed; i < numProcesses; i++)

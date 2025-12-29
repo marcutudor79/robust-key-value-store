@@ -16,6 +16,7 @@ import keyValueStore.msg.ReadRequest;
 import keyValueStore.msg.WriteRequest;
 import keyValueStore.msg.ProcessMessage;
 
+/* 3.REQ Use the name Process for the process class */
 public class Process extends AbstractActor {
 	private int localValue = 0;
 	private int localTimestamp = 0;
@@ -61,9 +62,11 @@ public class Process extends AbstractActor {
 				.match(ReferencesMessage.class, this::updateReference)
 				.match(CrashMessage.class, this::onCrash)
 				.match(LaunchMessage.class, this::onLaunch)
+                 /* 4.REQ Process class creates methods for executing put and get operations */
 				.match(ReadRequest.class, this::onReadRequest)
 				.match(ProcessMessage.class, this::onReadResponse)
-				.match(WriteRequest.class, this::onWriteRequest)
+				 /* 4.REQ Process class creates methods for executing put and get operations */
+                .match(WriteRequest.class, this::onWriteRequest)
 				.match(Ack.class, this::onAck)
 				.build();
 	}
@@ -73,6 +76,7 @@ public class Process extends AbstractActor {
 		N = actorRefList.size();
 	}
 
+    /* 6.REQ Upon receiving the CrashMessage, the process enters silent mode */
 	public void onCrash(CrashMessage message){
 		isCrashed = true;
 		log.info("process crashed");
