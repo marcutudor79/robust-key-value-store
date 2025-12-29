@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.ArrayList;
 import keyValueStore.msg.CrashMessage;
 import keyValueStore.msg.LaunchMessage;
+import keyValueStore.msg.OperationsMessage;
 import java.util.Collections;
 
 // KeyValueStore imports
@@ -23,24 +24,27 @@ public class Main {
 
     public static void main(String[] args) {
 
-        /* Validate numProcesses arg */
-        int numProcesses = -1;
-        int numCrashed   = -1;
+        /* Validate arguments */
+        int numProcesses  = -1;
+        int numCrashed    = -1;
+        int numOperations = -1;
         try {
-            numProcesses = Integer.parseInt(args[0]);
-            numCrashed   = Integer.parseInt(args[1]);
-            if (numProcesses < 0) {
-                throw new IllegalArgumentException("First argument (no of processes) must be a positive integer.");
+            numProcesses  = Integer.parseInt(args[0]);
+            numCrashed    = Integer.parseInt(args[1]);
+            numOperations = Integer.parseInt(args[2]);
+            if (numProcesses < 0 || numOperations < 0 || numCrashed < 0) {
+                throw new IllegalArgumentException("Arguments must be non-negative integers.");
             }
-            if (numCrashed < 0 || numCrashed >= numProcesses) {
-                throw new IllegalArgumentException("Second argument (no of crashed processes) must be a non-negative integer less than the number of processes.");
+            if (numCrashed >= numProcesses) {
+                throw new IllegalArgumentException("Second argument must be less than the number of processes.");
             }
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Arguments must be valid integers.", e);
+            throw new IllegalArgumentException("Arguments must be valid integers.");
         }
 
         LOGGER.config("The number of processes: " + numProcesses);
         LOGGER.config("The number of crashed processes: " + numCrashed);
+        LOGGER.config("The number of operations per process: " + numOperations);
 
         /* Create the Actor System in AKKA
             - create numProcesses actors
@@ -63,8 +67,10 @@ public class Main {
 
         /* 2.REQ Main class passes references of all actors to each actor */
         ReferencesMessage referencesMessage = new ReferencesMessage(processRefs);
+        OperationsMessage operationsMessage = new OperationsMessage(numOperations);
         for (ActorRef processRef : processRefs) {
             processRef.tell(referencesMessage, ActorRef.noSender());
+            processRef.tell(operationsMessage, ActorRef.noSender());
         }
 
         /* 5.REQ Main class selects F random processes then sends a special CrashMessage to each of them */
