@@ -6,24 +6,20 @@ This is a project in which a multi-actor key-value store system is implemented. 
 Please clone this repository taking into account the submodules:
 ```
 git clone <url> --recurse-submodules
+
+// takes into consideration the example folder - optional for development
 ```
 
 # Prerequisites (Ubuntu 24.04 LTS)
-- Java >= 21
+- Java Development Kit
 ```
     sudo apt install openjdk-21-jdk
+
+    // works with Java 8 as well
 ```
 - Apache Maven >= 3.8.7.2
 ```
     sudo apt install maven=3.8.7-2
-```
-- curl
-```
-    sudo apt install curl
-```
-- Akka cli
-``` bash
-    curl -sL https://doc.akka.io/install-cli.sh | bash
 ```
 - Make
 ```
@@ -50,7 +46,7 @@ To build and run the project, navigate to the `code/project` directory and execu
 commands:
 
 ```bash
-make
+make all
 ```
 
 # Contributors
