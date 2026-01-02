@@ -54,7 +54,6 @@ public class Process extends AbstractActor {
 		actorRefList = new ArrayList<>();
 		writeValue = new Integer[M];
 
-		// processes are called p + integer
 		/* the processes are named "p" + number of the process */ 
 		processNumber = Integer.parseInt(self().path().name().substring(1));
 		processName = "p" + processNumber;
