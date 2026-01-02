@@ -1,7 +1,9 @@
 package keyValueStore;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import akka.actor.ActorRef;
 import akka.actor.AbstractActor;
@@ -19,200 +21,222 @@ import keyValueStore.msg.ProcessMessage;
 
 /* 3.REQ Use the name Process for the process class */
 public class Process extends AbstractActor {
-	private int localValue = 0;
-	private int localTimestamp = 0;
-	private int timestamp = 0;
-	private List<ActorRef> actorRefList;
-	private int N;
-	private int M = 49; // default to the max number of operations per process
+    private int localValue = 0;
+    private int localTimestamp = 0;
+    private int timestamp = 0;
+    private List<ActorRef> actorRefList;
+    private int N;
+    private int M = 49; 
 
-	private Integer[] writeValue;
-	private int v;
-	private int operationsCompleted = 0;
-	private int readenValue;
+    private Integer[] writeValue;
+    private int v;
+    private int operationsCompleted = 0;
+    private int readenValue;
 
-	private boolean isCrashed = false;
-	private boolean isLaunched = false;
-	private int sequenceNumber = 0;
-	private int currentOpTimestamp;
+    private boolean isCrashed = false;
+    private boolean isLaunched = false;
+    private int sequenceNumber = 0;
+    
+    // Track CURRENT operation details to verify Acks
+    private int currentOpTimestamp;
+    private int currentOpValue; // ADDED: To verify Ack value
 
-	private boolean isWrite;
-	private int ackCount;
-	private List<ProcessMessage> readResponses = new ArrayList<>();
+    private boolean isWrite;
+    
+    // REPLACED 'int ackCount' with Set to handle duplicates/robustness
+    private Set<ActorRef> ackSenders = new HashSet<>(); 
+    
+    // REPLACED List-only logic with Set to handle duplicates
+    private List<ProcessMessage> readResponses = new ArrayList<>();
+    private Set<ActorRef> readResponseSenders = new HashSet<>();
 
-	// for logger
-	private int processNumber;
-	private String processName;
-	private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-	private long operationStartTime;
+    // for logger
+    private int processNumber;
+    private String processName;
+    private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+    private long operationStartTime;
 
+    public Process(){
+        actorRefList = new ArrayList<>();
+		// Note: writeValue initialization moved to updateOperations to ensure correct M
+        processNumber = Integer.parseInt(self().path().name().substring(1));
+        processName = "p" + processNumber;
+    }
 
-	public Process(){
-		actorRefList = new ArrayList<>();
-		writeValue = new Integer[M];
+    public static Props createActor() {
+        return Props.create(Process.class, () -> {
+            return new Process();
+        });
+    }
 
-		//processes are called p + integer
-		processNumber = Integer.parseInt(self().path().name().substring(1));
-		//moved in the updateRef method where I compute N
-		// for(int j = 0; j < M; j++){
-		// 	writeValue[j] = j*N + processNumber;
-		// }
-		processName = "p" + processNumber;
-	}
-
-	public static Props createActor() {
-		return Props.create(Process.class, () -> {
-			return new Process();
-		});
-	}
-
-	@Override
-	public Receive createReceive() {
-		return receiveBuilder()
-				.match(ReferencesMessage.class, this::updateReference)
-				.match(CrashMessage.class, this::onCrash)
-				.match(LaunchMessage.class, this::onLaunch)
-                 /* 4.REQ Process class creates methods for executing put and get operations */
-				.match(ReadRequest.class, this::onReadRequest)
-				.match(ProcessMessage.class, this::onReadResponse)
+    @Override
+    public Receive createReceive() {
+        return receiveBuilder()
+                .match(ReferencesMessage.class, this::updateReference)
+                .match(CrashMessage.class, this::onCrash)
+                .match(LaunchMessage.class, this::onLaunch)
+				 /* 4.REQ Process class creates methods for executing put and get operations */
+                .match(ReadRequest.class, this::onReadRequest)
+                .match(ProcessMessage.class, this::onReadResponse)
 				 /* 4.REQ Process class creates methods for executing put and get operations */
                 .match(WriteRequest.class, this::onWriteRequest)
-				.match(Ack.class, this::onAck)
+                .match(Ack.class, this::onAck)
                 .match(OperationsMessage.class, this::updateOperations)
-				.build();
-	}
+                .build();
+    }
 
-	public void updateReference(ReferencesMessage ref){
-		actorRefList = ref.getReferences();
-		N = actorRefList.size();
-		for(int j = 0; j < M; j++){
-			writeValue[j] = j*N + processNumber;
-		}
-	}
+    public void updateReference(ReferencesMessage ref){
+        actorRefList = ref.getReferences();
+        N = actorRefList.size();
+        // REMOVED: writeValue array filling here. M might be stale.
+    }
 
     /* 6.REQ Upon receiving the CrashMessage, the process enters silent mode */
-	public void onCrash(CrashMessage message){
-		isCrashed = true;
-		log.info(processName + ": " + "process crashed");
-	}
+    public void onCrash(CrashMessage message){
+        isCrashed = true;
+        log.info(processName + ": " + "process crashed");
+    }
 
-	public void onLaunch(LaunchMessage message){
-		if(isCrashed)	return;
-		isLaunched = true;
-		startOperation();
-	}
+    public void onLaunch(LaunchMessage message){
+        if(isCrashed) return;
+        isLaunched = true;
+        startOperation();
+    }
 
-	public void onReadRequest(ReadRequest message){
-		if(isCrashed)	return;
-		getSender().tell(new ProcessMessage(localValue,
-						localTimestamp, message.getSequenceNumber()), self());
-	}
+    public void onReadRequest(ReadRequest message){
+        if(isCrashed) return;
+        getSender().tell(new ProcessMessage(localValue,
+                        localTimestamp, message.getSequenceNumber()), self());
+    }
 
-	public void onReadResponse(ProcessMessage message) {
-		if(isCrashed || !isLaunched)	return;
-		if(message.getSequenceNumber() != sequenceNumber)	return;
-		int sendValue;
-		int sendTimestamp;
-		readResponses.add(message);
+    public void onReadResponse(ProcessMessage message) {
+        if(isCrashed || !isLaunched) return;
+        if(message.getSequenceNumber() != sequenceNumber) return;
 
-		if(readResponses.size() == N/2 + 1){
-			int maxTs = Integer.MIN_VALUE;
-			int maxVal = Integer.MIN_VALUE;
+        // FIXED: Count unique senders only
+        if (readResponseSenders.contains(getSender())) return;
+        readResponseSenders.add(getSender());
+        readResponses.add(message);
 
-			for(ProcessMessage m: readResponses){
-				if(m.getTimestamp() > maxTs){
-					maxTs = m.getTimestamp();
-					maxVal = m.getValue();
-				} else if (m.getTimestamp() == maxTs && m.getValue() > maxVal) {
+        // FIXED: Use logic "> N/2" (Majority)
+        if(readResponseSenders.size() == (N / 2) + 1){
+            int maxTs = Integer.MIN_VALUE;
+            int maxVal = Integer.MIN_VALUE;
+
+            for(ProcessMessage m: readResponses){
+                if(m.getTimestamp() > maxTs){
+                    maxTs = m.getTimestamp();
+                    maxVal = m.getValue();
+                } else if (m.getTimestamp() == maxTs && m.getValue() > maxVal) {
                     maxVal = m.getValue();
                 }
-			}
+            }
 
-			if(isWrite){
-				timestamp = maxTs + 1;
-				sendTimestamp = timestamp;
-				sendValue = v;
-			} else {
-				sendTimestamp = maxTs;
-				sendValue = maxVal;
-				readenValue = sendValue;
-			}
+            int sendValue;
+            int sendTimestamp;
 
-			currentOpTimestamp = sendTimestamp;
-			broadcastMessage(new WriteRequest(sendValue, sendTimestamp));
+            if(isWrite){
+                timestamp = maxTs + 1;
+                sendTimestamp = timestamp;
+                sendValue = v;
+            } else {
+                sendTimestamp = maxTs;
+                sendValue = maxVal;
+                readenValue = sendValue;
+            }
 
-		}
-	}
+            currentOpTimestamp = sendTimestamp;
+            currentOpValue = sendValue; // <--- SAVE value to verify Ack later
 
-	public void onWriteRequest(WriteRequest message){
-		if(isCrashed)	return;
-		int timestampReq = message.getTimestamp();
-		int valueReq = message.getValue();
+            broadcastMessage(new WriteRequest(sendValue, sendTimestamp));
+        }
+    }
 
-		if((timestampReq > localTimestamp) ||
-			(timestampReq == localTimestamp && valueReq > localValue))
-		{
-			localValue = valueReq;
-			localTimestamp = timestampReq;
-		}
+    public void onWriteRequest(WriteRequest message){
+        if(isCrashed) return;
+        int timestampReq = message.getTimestamp();
+        int valueReq = message.getValue();
 
-		getSender().tell(new Ack(valueReq, timestampReq), self());
-	}
+        if((timestampReq > localTimestamp) ||
+            (timestampReq == localTimestamp && valueReq > localValue))
+        {
+            localValue = valueReq;
+            localTimestamp = timestampReq;
+        }
 
-	public void onAck(Ack ack){
-		if (isCrashed || !isLaunched) return;
-		if (ack.getTimestamp() != currentOpTimestamp)	return;
+        getSender().tell(new Ack(valueReq, timestampReq), self());
+    }
 
-		ackCount++;
+    public void onAck(Ack ack){
+        if (isCrashed || !isLaunched) return;
+        
+        // FIXED: Validate Timestamp AND Value (Safety Violation Fix)
+        if (ack.getTimestamp() != currentOpTimestamp) return;
+        if (ack.getValue() != currentOpValue) return; 
 
-        if (ackCount == (N / 2) + 1) {
-			long timeSpent = System.nanoTime() - operationStartTime;
-			if (isWrite) {
-            	log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns");
-			} else {
-				log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns");
-			}
+        // FIXED: Count unique senders only (Robustness Fix)
+        if (ackSenders.contains(getSender())) return;
+        ackSenders.add(getSender());
+
+        // FIXED: Use logic "> N/2" (Majority)
+        if (ackSenders.size() == (N / 2) + 1) {
+            long timeSpent = System.nanoTime() - operationStartTime;
+            if (isWrite) {
+                log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns");
+            } else {
+                log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns");
+            }
 
             operationsCompleted++;
-            ackCount = -1;
             startOperation();
         }
-	}
+    }
 
-	private void startOperation(){
-		if(operationsCompleted == M*2){
-			log.info(processName + ": " + "all operations completed");
-			return;
-		}
-		ackCount = 0;
+    private void startOperation(){
+        if(operationsCompleted == M*2){
+            log.info(processName + ": " + "all operations completed");
+            return;
+        }
+        
+        // Reset trackers
+        ackSenders.clear();
+        readResponses.clear();
+        readResponseSenders.clear();
 
-		operationStartTime = System.nanoTime();
+        operationStartTime = System.nanoTime();
+        if(operationsCompleted < M){
+            isWrite = true;
+            v = writeValue[operationsCompleted];
+            log.info(processName + ": " + "Invoke write");
+        }
+        else {
+            isWrite = false;
+            log.info(processName + ": " + "Invoke read");
+        }
+        
+        sequenceNumber++;
+        ReadRequest req = new ReadRequest(sequenceNumber);
 
-		if(operationsCompleted < M){
-			isWrite = true;
-			v = writeValue[operationsCompleted];
-			log.info(processName + ": " + "Invoke write");
-		}
-		else {
-			isWrite = false;
-			log.info(processName + ": " + "Invoke read");
-		}
-		readResponses.clear();
-		sequenceNumber++;
-		ReadRequest req = new ReadRequest(sequenceNumber);
+        broadcastMessage(req);
+    }
 
-		broadcastMessage(req);
-
-	}
-
-	private void broadcastMessage(Object msg){
-		for (ActorRef actor : actorRefList) {
-			actor.tell(msg, self());
-		}
-	}
+    private void broadcastMessage(Object msg){
+        for (ActorRef actor : actorRefList) {
+            actor.tell(msg, self());
+        }
+    }
 
     public void updateOperations(OperationsMessage msg) {
         this.M = msg.getNumOperations();
+        
+        // FIXED: Initialize array here with the correct M
+        writeValue = new Integer[M];
+        for(int j = 0; j < M; j++){
+            // Formula from project requirement: v = i + k*N
+            // processNumber is 'i', j is 'k'
+            writeValue[j] = j * N + processNumber;
+        }
+        
         log.info("Updated number of operations to " + M);
     }
 }
