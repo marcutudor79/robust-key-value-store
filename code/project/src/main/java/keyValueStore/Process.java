@@ -203,6 +203,11 @@ public class Process extends AbstractActor {
         readResponses.clear();
         readResponseSenders.clear();
 
+        /*
+            8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations
+            - M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
+            - M get operations for k = 1
+        */
         operationStartTime = System.nanoTime();
         if(operationsCompleted < M){
             isWrite = true;
@@ -229,6 +234,11 @@ public class Process extends AbstractActor {
     public void updateOperations(OperationsMessage msg) {
         this.M = msg.getNumOperations();
 
+        /*
+            8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations
+            - M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
+            - M get operations for k = 1
+        */
         // FIXED: Initialize array here with the correct M
         writeValue = new Integer[M];
         for(int j = 0; j < M; j++){
