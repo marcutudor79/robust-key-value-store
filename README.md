@@ -41,13 +41,36 @@ Akka actors - higher level of abstraction for writing concurrent distributed sys
    - Has:
         - ActorReference: unique address to send messages to an actor, to restart it, etc.
 
-# Running the project
-To build and run the project, navigate to the `code/project` directory and execute the following
-commands:
+## Running the Project
+
+To build and run the project, navigate to the `code/project` directory and run:
 
 ```bash
 make all
 ```
+
+# Available Commands
+Additional commands are available to demonstrate full project capabilities:
+
+```bash
+make all
+```
+Compiles the code and runs the full benchmark suite (Scenarios 1–9).
+
+```bash
+make benchmark
+```
+Same as make all, runs the full suite and prints the performance table.
+
+```bash
+make run
+```
+Runs a single default test case (N=10, f=4, M=3).
+
+```bash
+make clean
+```
+Removes compiled files and previous results.
 
 # Contributors
 
