@@ -4,96 +4,118 @@ package keyValueStore;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
 import akka.actor.ActorRef;
+import akka.actor.AbstractActor;
 
 // Java imports
 import java.util.logging.Logger;
 import java.util.List;
 import java.util.ArrayList;
-import keyValueStore.msg.CrashMessage;
-import keyValueStore.msg.LaunchMessage;
-import keyValueStore.msg.OperationsMessage;
 import java.util.Collections;
-
-// KeyValueStore imports
-import keyValueStore.msg.ReferencesMessage;
+// Added imports for file writing
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.io.IOException;
+import keyValueStore.msg.*;
 
 public class Main {
 
     /* Logger */
     final static Logger LOGGER = Logger.getLogger(Main.class.getName());
 
+    public static class BenchmarkMonitor extends AbstractActor {
+        private final int expectedMessages;
+        private int receivedMessages = 0;
+        private final long startTime;
+        // Added fields for reporting
+        private final int N;
+        private final int f;
+        private final int M;
+
+        public BenchmarkMonitor(int expectedMessages, int N, int f, int M) {
+            this.expectedMessages = expectedMessages;
+            this.N = N;
+            this.f = f;
+            this.M = M;
+            this.startTime = System.currentTimeMillis();
+        }
+
+        public static Props createActor(int expectedMessages, int N, int f, int M) {
+            return Props.create(BenchmarkMonitor.class, () -> new BenchmarkMonitor(expectedMessages, N, f, M));
+        }
+
+        @Override
+        public Receive createReceive() {
+            return receiveBuilder()
+                .match(DoneMessage.class, msg -> {
+                    receivedMessages++;
+                    if (receivedMessages >= expectedMessages) {
+                        long totalTime = System.currentTimeMillis() - startTime;
+                        
+                        // 1. Write result to file for the final table
+                        try (FileWriter fw = new FileWriter("benchmark_results.csv", true);
+                             PrintWriter out = new PrintWriter(fw)) {
+                            out.printf("%-5d | %-5d | %-5d | %-5d ms%n", N, f, M, totalTime);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+
+                        // 2. Print completion to console
+                        System.out.println("=========================================");
+                        System.out.println("BENCHMARK FINISHED!");
+                        System.out.println("TOTAL LATENCY: " + totalTime + " ms");
+                        System.out.println("=========================================");
+                        getContext().getSystem().terminate(); 
+                    }
+                })
+                .build();
+        }
+    }
+
     public static void main(String[] args) {
+        // 10.REQ & 10.1 REQ: dynamic arguments
+        int numProcesses = Integer.parseInt(args[0]);
+        int numCrashed = Integer.parseInt(args[1]);
+        int numOperations = Integer.parseInt(args[2]);
 
-        /* Validate arguments */
-        /* 10.1 REQ take f, M as arguments
-            f = numCrashed
-            M = numOperations */
-        int numProcesses  = -1;
-        int numCrashed    = -1;
-        int numOperations = -1;
-        try {
-            numProcesses  = Integer.parseInt(args[0]);
-            numCrashed    = Integer.parseInt(args[1]);
-            numOperations = Integer.parseInt(args[2]);
-            if (numProcesses < 0 || numOperations < 0 || numCrashed < 0) {
-                throw new IllegalArgumentException("Arguments must be non-negative integers.");
-            }
-            if (numCrashed >= numProcesses) {
-                throw new IllegalArgumentException("Second argument must be less than the number of processes.");
-            }
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Arguments must be valid integers.");
-        }
-
-        LOGGER.config("The number of processes: " + numProcesses);
-        LOGGER.config("The number of crashed processes: " + numCrashed);
-        LOGGER.config("The number of operations per process: " + numOperations);
-
-        /* Create the Actor System in AKKA
-            - create numProcesses actors
-            - pass a reference to each actor to every other actor
-        */
         final ActorSystem system = ActorSystem.create("KeyValueStoreSystem");
-        List<akka.actor.ActorRef> processRefs = new ArrayList<>();
+        List<ActorRef> processRefs = new ArrayList<>();
 
-        /* 1.REQ Main class creates N actors */
+        // 1.REQ Create N actors
         for (int i = 0; i < numProcesses; i++) {
-            Props process = Process.createActor();
-            try {
-                ActorRef processRef = system.actorOf(process, "p" + i);
-                processRefs.add(processRef);
-                LOGGER.info("Created actor Process" + i);
-            } catch (Exception e) {
-                LOGGER.severe("Failed to create actor Process" + i);
-            }
+            processRefs.add(system.actorOf(Process.createActor(), "p" + i));
         }
 
-        /* 2.REQ Main class passes references of all actors to each actor */
-        ReferencesMessage referencesMessage = new ReferencesMessage(processRefs);
+        // CREATE MONITOR (Updated to receive N, f, M for reporting)
+        int expectedActive = numProcesses - numCrashed;
+        ActorRef monitor = system.actorOf(BenchmarkMonitor.createActor(expectedActive, numProcesses, numCrashed, numOperations), "monitor");
+
+        // 2.REQ Pass references (including monitor)
+        ReferencesMessage referencesMessage = new ReferencesMessage(processRefs, monitor);
         OperationsMessage operationsMessage = new OperationsMessage(numOperations);
+        
         for (ActorRef processRef : processRefs) {
             processRef.tell(referencesMessage, ActorRef.noSender());
             processRef.tell(operationsMessage, ActorRef.noSender());
         }
 
-        /* 5.REQ Main class selects F random processes then sends a special CrashMessage to each of them */
-		List<ActorRef> toCrash = new ArrayList<>(processRefs);
-		Collections.shuffle(toCrash);
+        // 5.REQ Select F random processes to crash
+        List<ActorRef> toCrash = new ArrayList<>(processRefs);
+        Collections.shuffle(toCrash);
+        for (int i = 0; i < numCrashed; i++) {
+            toCrash.get(i).tell(new CrashMessage(), ActorRef.noSender());
+        }
 
-		for (int i = 0; i < numCrashed; i++)
-			toCrash.get(i).tell(new CrashMessage(), ActorRef.noSender());
+        // 7.REQ Send LaunchMessage
+        LaunchMessage launch = new LaunchMessage();
+        for (int i = numCrashed; i < numProcesses; i++) {
+            toCrash.get(i).tell(launch, ActorRef.noSender());
+        }
 
-		/* 7.REQ Main class sends a LaunchMessage to all non-crashed processes */
-		LaunchMessage launch = new LaunchMessage();
-
-		for (int i = numCrashed; i < numProcesses; i++)
-			toCrash.get(i).tell(launch, ActorRef.noSender());
-
+        // WAIT FOR TERMINATION (Monitored by Actor)
         try {
-            system.terminate();
             system.getWhenTerminated().toCompletableFuture().get();
         } catch (Exception e) {
-            LOGGER.severe("Error during ActorSystem termination: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

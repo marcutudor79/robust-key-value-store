@@ -18,6 +18,7 @@ import keyValueStore.msg.OperationsMessage;
 import keyValueStore.msg.ReadRequest;
 import keyValueStore.msg.WriteRequest;
 import keyValueStore.msg.ProcessMessage;
+import keyValueStore.msg.DoneMessage;
 
 /* 3.REQ Use the name Process for the process class */
 public class Process extends AbstractActor {
@@ -55,6 +56,8 @@ public class Process extends AbstractActor {
     private String processName;
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private long operationStartTime;
+    
+    private ActorRef monitor;
 
     public Process(){
         actorRefList = new ArrayList<>();
@@ -87,6 +90,7 @@ public class Process extends AbstractActor {
 
     public void updateReference(ReferencesMessage ref){
         actorRefList = ref.getReferences();
+        monitor = ref.getMonitor();
         N = actorRefList.size();
         // REMOVED: writeValue array filling here. M might be stale.
     }
@@ -181,6 +185,7 @@ public class Process extends AbstractActor {
 
         // FIXED: Use logic "> N/2" (Majority)
         if (ackSenders.size() == (N / 2) + 1) {
+            // 11.REQ: Measure latency (End Timer & Calculation)
             long timeSpent = System.nanoTime() - operationStartTime;
             if (isWrite) {
                 log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns");
@@ -189,26 +194,32 @@ public class Process extends AbstractActor {
             }
 
             operationsCompleted++;
+
+            // 9.REQ: Every process performs at most one operation at a time (next op starts only after current completes)
             startOperation();
         }
     }
 
 	private void startOperation(){
-		if(operationsCompleted == M*2){
-			log.info(processName + ": " + "all operations completed");
-            getContext().stop(self()); // Terminate this actor
-			return;
-		}
-		ackSenders.clear();
+        if(operationsCompleted == M*2){
+            log.info(processName + ": " + "all operations completed");
+            if (monitor != null) {
+                monitor.tell(new DoneMessage(), self());
+            }
+            return;
+        }
+        ackSenders.clear();
         readResponses.clear();
         readResponseSenders.clear();
+
+        // 11.REQ: Measure latency (Start Timer)
+        operationStartTime = System.nanoTime();
 
         /*
             8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations
             - M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
             - M get operations for k = 1
         */
-        operationStartTime = System.nanoTime();
         if(operationsCompleted < M){
             isWrite = true;
             v = writeValue[operationsCompleted];

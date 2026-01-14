@@ -16,10 +16,10 @@
     - M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
     - M get operations for k = 1
 
-- [?] 9.REQ Every process performs at most one operation at a time
+- [x] 9.REQ Every process performs at most one operation at a time
 
-- [?] 10.REQ perform the experiment with N = 3,10,100 (with f = 1, 4, 49) and M = 3,10,100
+- [x] 10.REQ perform the experiment with N = 3,10,100 (with f = 1, 4, 49) and M = 3,10,100
       10.1 REQ take f, M as arguments
 
-- [?] 11.REQ measure latency - total computation time
+- [x] 11.REQ measure latency - total computation time
 
