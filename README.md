@@ -49,6 +49,17 @@ To build and run the project, navigate to the `code/project` directory and run:
 make all
 ```
 
+## Linearizability Check (N=3, M=3)
+This repository includes a simple Python checker to validate that the exported history for N=3 and M=3 is linearizable with respect to the single-key MWMR atomic register.
+
+
+- Run the checker on the captured log:
+
+```bash
+cd ../..
+python3 tools/linearizability_checker.py --log logs_N3_M3.txt --default 0
+```
+
 # Available Commands
 Additional commands are available to demonstrate full project capabilities:
 

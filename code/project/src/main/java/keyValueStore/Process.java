@@ -180,11 +180,9 @@ public class Process extends AbstractActor {
             // 11.REQ: Measure latency (End Timer & Calculation)
             long timeSpent = System.nanoTime() - operationStartTime;
             if (isWrite) {
-                // line 14: return ok
-                log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns");
+                log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns end_ts=" + System.nanoTime() + " seq=" + sequenceNumber);
             } else {
-                // line 22: return v_m
-                log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns");
+                log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns end_ts=" + System.nanoTime() + " seq=" + sequenceNumber);
             }
             operationsCompleted++;
             // 9.REQ: Every process performs at most one operation at a time (next op starts only after current completes)
@@ -218,11 +216,11 @@ public class Process extends AbstractActor {
         if(operationsCompleted < M){
             isWrite = true;
             v = writeValue[operationsCompleted];
-            log.info(processName + ": " + "Invoke write");
+            log.info(processName + ": " + "Invoke write start_ts=" + operationStartTime + " seq=" + sequenceNumber);
         }
         else {
             isWrite = false;
-            log.info(processName + ": " + "Invoke read");
+            log.info(processName + ": " + "Invoke read start_ts=" + operationStartTime + " seq=" + sequenceNumber);
         }
         sequenceNumber++; // lines 7 and 16
         // lines 8 and 17: send [?, r] to all
