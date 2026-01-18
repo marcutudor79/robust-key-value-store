@@ -30,18 +30,18 @@
 
 
 \lstset{
-  basicstyle=\ttfamily\small,      % letra de código
-  frame=single,                    % marco alrededor
+  basicstyle=\ttfamily\small,
+  frame=single,
   columns=fullflexible,
   keepspaces=true,
   showstringspaces=false,
   commentstyle=\color{gray},
   keywordstyle=\color{blue},
-  numbers=left,                    % números de línea
+  numbers=left,
   numberstyle=\tiny\color{gray},
   stepnumber=1,
   numbersep=8pt,
-  backgroundcolor=\color{gray!10}, % fondo suave
+  backgroundcolor=\color{gray!10},
   tabsize=2,
   captionpos=b
 }
@@ -69,7 +69,7 @@
 
         {\Large Members: \par}
         {\Large KABIL Aymen \par}
-        {\Large FAMA Daniele \par}
+        {\Large FAMÀ Daniele \par}
         {\Large BARAU  Elena\par}
         {\Large MARCULESCU Tudor\par}
 
@@ -92,8 +92,155 @@
 \clearpage
 
 \newpage
+\section{Introduction}
+
+In this project we are proposing an implementation for the robust key-value store problem in a distributed
+system. Our design is based on Akka, which is a middleware that allows to easily create actor based
+systems in Java. The ideea is to be able to simulate multiple nodes of the system on a single machine
+using multiple actors in Akka.
+
+Our system is fault tolerant to actors crashing. The system is able to continue if the number of actors
+that crashed is less than half of their total number. If the number of crashes exceeds this limit,
+the system is not able to guarantee the correctness, due to the posibility of having partitions.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% 2. System description
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\section{System description}
+
+The key-value store distributed system is highly concurent, meaning that multiple clients can send
+write or read requests at the same time. The non-trivial of concurrency happens when multiple clients
+are sending write requests for the same key at the same time, therefore having the same timestamp. This
+is explained in the following subsections. In order to understand what the read and write operations
+do, the sequential specification of them is explained first.
+
+\subsection{Sequential specification}
+
+The state of a key-value store is a set of key-value pairs The state of a key-value store is a set of key-value pairs of the form (k, v), where k is an integer and v
+is a value in a given value set (assume that values are also integers). The initial state is an empty set.
+The system exports two operations:
+
+- put(k, v) sets the value with key k to v (overwriting the old value if it is already in the set).
+
+- get(k) returns the value of key k (the default value $\bot$ is returned is the key is not at the system).
+
+\subsection{Actor behaviour description}
+
+To write a new value v, a writer increments its local sequence number r, sends a read request [?, r]
+to all the processes, waits for the responses of the type [v', t', r] from a majority (> n/2) of the
+processes (we also say a quorum). Then it picks up the highest timestamp tmax in the set of received
+responses, computes its new timestamp as t = tmax + 1 and sends a write request [v, t] to all the pro-
+cesses in the system. The operation completes as soon as responses of the type [ack, v, t] are received
+from a quorum.
+
+To read the register value, a reader increments its sequence number r and sends a read
+request [?, r] to every all the processes. As soon as responses of the type [v', t', r] are received
+from a quorum, the operation selects the value vm equipped with the highest timestamp tm. If there are
+multiple different values written with timestamp tm, the largest such value is chosen. To make sure
+that subsequent read operations will not “miss” the returned value, the reader then sends a write request
+[vm, tm], waits until a quorum conﬁrms it by sending [ack, vm, tm], and only then returns v.
+
+Notice that, as multiple values can be written with the same timestamp, the value is attached to the
+acknowledgement sent to a write request. This is needed to ensure that the acknowledgement is indeed
+sent to this write request and not to an earlier write request with the same timestamp but a different value
+(this could happen if the operation is concurrent with multiple writes using the same timestamp).
+An alternative solution is to maintain an additional sequence number attached to every write request a process issues.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% 3. Proof of correcteness
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\section{Proof of correctness}
+
+In order to prove the correcteness of our implementation, we need to show that it satisfies both
+safety and liveness properties. To do so, we will first start by proving that the implementation
+of our Process.java class is safe.
+
+\subsection{Safety}
+
+The system implemented is similar to an ABD algorithm, but in our case, there are multiple writers
+and readers and the implemented registers are atomic. For simplicity, out of the k keys that would
+be possible to be used in order to store values, we will focus on the case of a single key. Therefore,
+both the writers and readers will be using k = 0 to store and retrieve values.
+
+Since we have multiple writers and readers, one would need to prove that the system still behaves
+as an atomic register. This would mean that the last written value is the one that is retrieved by
+the next read operation. A depiction of such a scenario is shown in the figure
+
+// Add figure showing 3 concurrent processes writing and reading the same key
+
+// Proof about the the imposibility of reading an old value after a new one has been written
 
 
+\subsection{Liveness}
+
+// Proof that if less than half of the processes crash, the system is still able to make progress
+
+
+\subsection{Conclusion on correctness}
+
+If both safety and liveness are satisfied, then the system is argued to be correct.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% 4. Performance evaluation
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\section {Performance evaluation}
+
+Performance evaluation of our implementation is based on measuring the time taken for all the read
+and write operations to complete. There are multiple factors that can influence this time, such as
+the total number of processes in the system, the number of write and read operations.
+
+Our test suite is implemented such that N the number of processes in the system, f the number of
+failed processes and M the number of read and write operations can be configured before starting the
+program. N is varied between 3, 10 and 100, while f is set to be equal to 1, 4 or 49. M is also varied
+between 3, 10 and 100.
+
+Table \ref{tab:performance-obtained} shows the results of our performance evaluation:
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Number of processes N} & \textbf{Number of failed processes f} & \textbf{Number of operations } & \textbf{Latency [ms]} \\
+\hline
+
+3    & 1                 & 3           & 10        \\
+3    & 1                 & 10          & 23        \\
+3    & 1                 & 100         & 113       \\
+10   & 4                 & 3           & 61        \\
+10   & 4                 & 10          & 79        \\
+10   & 4                 & 100         & 201       \\
+100  & 49                & 3           & 231       \\
+100  & 49                & 10          & 353       \\
+100  & 49                & 100         & 1343      \\
+
+\hline
+\end{tabular}
+\caption{Performance obtained}\label{tab:performance-obtained}
+\end{table}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% 5. Conclusion
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\section{Conclusion}
+
+To conclude our report, we can say that our implementation of a robust key-value store in a distributed
+system is able to satisfy both safety and liveness properties, making it a reliable solution for
+storing and retrieving data in a distributed environment. The use of Akka as a middleware allowed us
+to easily create an actor-based system that can handle multiple clients concurrently, while also
+being fault-tolerant to actor crashes. Overall, our project demonstrates the feasibility of building
+a robust key-value store in a distributed system.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -104,7 +251,7 @@
 
 \newpage % keep bibliography on a new page
 \bibliographystyle{plain}   % choose a style
-\bibliography{ref-pr2}      % name of .bib file (no .bib extension)
+\bibliography{ref}      % name of .bib file (no .bib extension)
 
 
 \end{document}
