@@ -25,6 +25,12 @@ git clone <url> --recurse-submodules
 ```
     sudo apt install make
 ```
+- LaTeX compiler and packages
+```
+    sudo apt install texlive-full
+
+    sudo apt install latexmk
+```
 
 Then follow the instrunctions from https://doc.akka.io/getting-started/starthere.html to see if a starting sample builds and runs.
 
