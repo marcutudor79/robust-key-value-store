@@ -6,7 +6,7 @@
 # separate terms of service, privacy policy, and support
 # documentation.
 
-name: Java CI with Maven
+name: Run the program and compile the report
 
 on:
   push:
@@ -31,4 +31,32 @@ jobs:
         cache: maven
 
     - name: Run make all
-      run: cd code/project && make all
+      run: |
+        cd code/project && make all
+        cd ../..
+
+    - name: Upload benchmark report as artifact
+      id: upload-workflow-tab-0
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-csv
+        path: code/project/benchmark_results.csv
+
+    - name: Compile LaTeX report
+      uses: xu-cheng/latex-action@v3
+      with:
+        working_directory: report/
+        root_file: main.tex
+        latexmk_use_lualatex: true
+
+    - name: Arrange output
+      run: |
+        mkdir -p report/output
+        mv report/main.pdf report/output/main.pdf
+
+    - name: Upload report in PDF format as artifact
+      id: upload-workflow-tab-1
+      uses: actions/upload-artifact@v4
+      with:
+        name: report-pdf
+        path: report/output/main.pdf
