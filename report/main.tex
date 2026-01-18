@@ -1,0 +1,110 @@
+\documentclass{article}
+\usepackage{graphicx}                            % Required for inserting images
+\usepackage[paper=a4paper, top=1.5cm, bottom=1.5cm, left=2.0cm, right=2.0cm, heightrounded]{geometry}
+\usepackage{hyperref}                            % Clickable links (disabled for minimal TeX install)
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{tabularx}
+\usepackage{colortbl}
+\usepackage{adjustbox}
+\usepackage{rotating}
+\usepackage{float}
+\usepackage[justification=centering]{caption}
+\usepackage{listings}
+\usepackage{listings}
+
+\usepackage{framed}
+\usepackage[nobreak=true]{mdframed}
+\usepackage{tikz}
+\usepackage{longtable}
+\usepackage{pdflscape}
+\usepackage{graphicx}
+\usepackage{pdfpages}
+
+\usetikzlibrary{positioning, arrows.meta, shapes, calc}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+
+
+\lstset{
+  basicstyle=\ttfamily\small,      % letra de código
+  frame=single,                    % marco alrededor
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  commentstyle=\color{gray},
+  keywordstyle=\color{blue},
+  numbers=left,                    % números de línea
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  numbersep=8pt,
+  backgroundcolor=\color{gray!10}, % fondo suave
+  tabsize=2,
+  captionpos=b
+}
+\graphicspath{ {./img/} }
+
+
+
+\begin{document}
+
+
+\begin{titlepage}
+    \begin{center}
+        {\includegraphics[width=0.4\textwidth]{telecomparis.png} \par}
+        \vspace{1cm}
+        {\bfseries\LARGE Télécom Paris \par}
+        \vspace{1cm}
+        \vspace{2cm}
+        {\scshape\Huge Project Robust Key-Value Store \par}
+        \vspace{1cm}
+            {\itshape\Large Fundamentals of algorithms \par}
+        \vfill
+        \vspace{1cm}
+            {\itshape\Large Professor: KUZNETSOV Petr \par}
+        \vspace{2cm}
+
+        {\Large Members: \par}
+        {\Large KABIL Aymen \par}
+        {\Large FAMA Daniele \par}
+        {\Large BARAU  Elena\par}
+        {\Large MARCULESCU Tudor\par}
+
+        \vfill
+
+        \vfill
+        {\Large January 2026 \par}
+    \end{center}
+\end{titlepage}
+
+\clearpage
+
+
+\tableofcontents
+\clearpage
+\listoftables
+\listoffigures
+
+
+\clearpage
+
+\newpage
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% SECTION BIBLIOGRAPHY
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newpage % keep bibliography on a new page
+\bibliographystyle{plain}   % choose a style
+\bibliography{ref-pr2}      % name of .bib file (no .bib extension)
+
+
+\end{document}
