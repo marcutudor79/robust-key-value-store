@@ -17,6 +17,7 @@ import keyValueStore.msg.ReadRequest;
 import keyValueStore.msg.ReferencesMessage;
 import keyValueStore.msg.WriteRequest;
 import keyValueStore.msg.DoneMessage;
+import keyValueStore.KVLogger;
 /* 3.REQ Use the name Process for the process class */
 public class Process extends AbstractActor {
     // line 1: locally stored value, initially 0
@@ -89,7 +90,9 @@ public class Process extends AbstractActor {
     /* 6.REQ Upon receiving the CrashMessage, the process enters silent mode */
     public void onCrash(CrashMessage message){
         isCrashed = true;
-        log.info(processName + ": " + "process crashed");
+        String line = processName + ": " + "process crashed";
+        log.info(line);
+        KVLogger.log(line);
         // getContext().stop(self()); // Terminate this actor  <-- REMOVED to honor "silent mode"
     }
     public void onLaunch(LaunchMessage message){
@@ -180,9 +183,13 @@ public class Process extends AbstractActor {
             // 11.REQ: Measure latency (End Timer & Calculation)
             long timeSpent = System.nanoTime() - operationStartTime;
             if (isWrite) {
-                log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns end_ts=" + System.nanoTime() + " seq=" + sequenceNumber);
+                String line = processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns end_ts=" + System.nanoTime() + " seq=" + sequenceNumber;
+                log.info(line);
+                KVLogger.log(line);
             } else {
-                log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns end_ts=" + System.nanoTime() + " seq=" + sequenceNumber);
+                String line = processName + ": " + "Get return value: " + readenValue + " operation duration: " + timeSpent +"ns end_ts=" + System.nanoTime() + " seq=" + sequenceNumber;
+                log.info(line);
+                KVLogger.log(line);
             }
             operationsCompleted++;
             // 9.REQ: Every process performs at most one operation at a time (next op starts only after current completes)
@@ -195,7 +202,9 @@ public class Process extends AbstractActor {
         - M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
         - M get operations for k = 1 */
         if(operationsCompleted == M*2){
-            log.info(processName + ": " + "all operations completed");
+            String line = processName + ": " + "all operations completed";
+            log.info(line);
+            KVLogger.log(line);
             // Notify monitor before terminating to allow scenario completion and CSV writing
             if (monitor != null) {
                 monitor.tell(new DoneMessage(), self());
@@ -216,11 +225,15 @@ public class Process extends AbstractActor {
         if(operationsCompleted < M){
             isWrite = true;
             v = writeValue[operationsCompleted];
-            log.info(processName + ": " + "Invoke write start_ts=" + operationStartTime + " seq=" + sequenceNumber);
+            String line = processName + ": " + "Invoke write start_ts=" + operationStartTime + " seq=" + sequenceNumber;
+            log.info(line);
+            KVLogger.log(line);
         }
         else {
             isWrite = false;
-            log.info(processName + ": " + "Invoke read start_ts=" + operationStartTime + " seq=" + sequenceNumber);
+            String line = processName + ": " + "Invoke read start_ts=" + operationStartTime + " seq=" + sequenceNumber;
+            log.info(line);
+            KVLogger.log(line);
         }
         sequenceNumber++; // lines 7 and 16
         // lines 8 and 17: send [?, r] to all
