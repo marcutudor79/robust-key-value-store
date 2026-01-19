@@ -97,11 +97,25 @@
 In this project we are proposing an implementation for the robust key-value store problem in a distributed
 system. Our design is based on Akka, which is a middleware that allows to easily create actor based
 systems in Java. The ideea is to be able to simulate multiple nodes of the system on a single machine
-using multiple actors in Akka.
+using multiple actors in the Akka framework. Java 8 jdk can be used to compile and run the project with
+Maven as a build tool.
 
-Our system is fault tolerant to actors crashing. The system is able to continue if the number of actors
-that crashed is less than half of their total number. If the number of crashes exceeds this limit,
-the system is not able to guarantee the correctness, due to the posibility of having partitions.
+The implementation is split into multiple classes, each one having a specific role in the system.
+One of the most important is the Process.java, which contains the behaviour described in the pseudocode
+presented in the project description. The main class is responsible for creating the actors, setting
+some of them to a crashed state and starting the read and write operations.
+
+Our system is fault tolerant to actors crashing, as long as their number is less then a half. If the
+number of crashes exceeds this limit, the system is not able to guarantee the correctness, due to the
+posibility of having partitions.
+
+The implementation is tested with multiple scenarios, varying the number of processes in the system,
+the number of crashed processes and the number of read and write operations. This is done by the means
+of passing arguments to the main class in a Makefile configuration that is provided in the project.
+After a successful run, the latency of the operations is printed in the console, as well as the total
+time taken for all the operations to complete, which is added in a csv file for further analysis.
+
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -158,33 +172,237 @@ An alternative solution is to maintain an additional sequence number attached to
 \section{Proof of correctness}
 
 In order to prove the correcteness of our implementation, we need to show that it satisfies both
-safety and liveness properties. To do so, we will first start by proving that the implementation
-of our Process.java class is safe.
+safety and liveness properties. Technically, most of the implementation is part of the Process.java
+file that contains the actor behaviour in the context of Akka. The main logic is there to handle
+actor creation, actor crashing and actor start. This does not affect the correctness of the system,
+unless the number of crashed actors exceeds half of the total number of actors, which is not the
+case for the testing scenarios that are run in this project.
 
 \subsection{Safety}
 
 The system implemented is similar to an ABD algorithm, but in our case, there are multiple writers
 and readers and the implemented registers are atomic. For simplicity, out of the k keys that would
 be possible to be used in order to store values, we will focus on the case of a single key. Therefore,
-both the writers and readers will be using k = 0 to store and retrieve values.
+both the writers and readers will be using k = 0 to store and retrieve values. Safety properties allow
+us to argue that the system never returns an incorrect value, or trivially, that nothing bad ever
+happens.
 
-Since we have multiple writers and readers, one would need to prove that the system still behaves
-as an atomic register. This would mean that the last written value is the one that is retrieved by
-the next read operation. A depiction of such a scenario is shown in the figure
+Since we have multiple writers and readers, one would need to prove that the additional steps that
+were added to the ABD algorithm are there to maintain safety and linearizability. When talking about
+safety, the behaviour of the system would need to be exactly as the one of the atomic register, for
+which the last written value is the one that is retrieved by subsequent read operations. Therefore,
+the attention for the safety proof is shifting towards the parts of the implementation where an output
+value is returned. In our case, this happens in two places, depending on whether the operation is a
+write or a read. Figure \ref{fig:safety-output} shows a code snippet in which the output is returned
+as a log message from the Process.java class. The lines addonations are added in order to easily link
+the implementation in java to the pseudocode presented in the project description.
 
-// Add figure showing 3 concurrent processes writing and reading the same key
+\begin{figure}[H]
+\begin{lstlisting}
+// From Process.java
+// lines 13 and 21: wait until received [ack, v, t] from a majority
+    if (isWrite) {
+        // line 14: return ok
+        log.info(processName + ": " + "Put value: " + v + " operation duration: " + timeSpent +"ns");
+    } else {
+        // line 22: return v_m
+        log.info(processName + ": " + "Get return value: " + readenValue + " operation duration: "
+        + timeSpent +"ns");
+    }
+\end{lstlisting}
+\caption{Code snippet for output implementation}\label{fig:safety-output}
+\end{figure}
 
-// Proof about the the imposibility of reading an old value after a new one has been written
+If the operation is a write, the process simply returns an "ok" message in the form of what value was
+written and the total time taken to finish the operation. Before that, the process needs to know that
+what is being written is indeed acknowledged by a quorum of processes. This is guaranteed by the condition
+of having received [ack, $v_m$, $t_m$] messages from a majority of processes, as shown in the figure \ref{fig:safety-output}.
+Of course, there are some checks that need to be done before counting the received acknowledgements, such as
+checking if the process is crashed or not, if it has been launched or not, if the timestamp received
+matches the current operation timestamp and if the value received matches the current operation value.
 
+
+\begin{figure}[H]
+\begin{lstlisting}
+public void onAck(Ack ack){
+        if (isCrashed || !isLaunched) return;
+        if (ack.getTimestamp() != currentOpTimestamp) return;
+        if (ack.getValue() != currentOpValue) return;
+        if (ackSenders.contains(getSender())) return;
+        ackSenders.add(getSender());
+        if (ackSenders.size() >= (N / 2) + 1) {
+            // 11.REQ: Measure latency (End Timer & Calculation)
+            long timeSpent = System.nanoTime() - operationStartTime;
+            if (isWrite) {
+                ...
+            }
+        ...
+        }
+}
+\end{lstlisting}
+\caption{Majority check for write}\label{fig:safety-output}
+\end{figure}
+
+Now assuming that a quorum of processes have acknowledged the write operation, we can be sure that at
+when a process reads, it is guaranteed to query at least one process that participated in the most
+recent successful write. This prevents the reader from returning on old value. However, this is not
+sufficient to guarantee that no new-old inversion happens.
+
+The timestamps used for writes need to be monotonically increasing. A process only updates its local
+state if the incoming information is "newer" (higher timestamp) or "larger" (tie-breaking by value).
+This enforces strictly increasing timestamps on every node. A reader collecting these values will
+therefore never see a timestamp decrease over time for the same sequence of operations. This can be
+seen in figure \ref{fig:safety-timestamp-update}.
+
+\begin{figure}[H]
+\begin{lstlisting}
+public void onWriteRequest(WriteRequest message){
+    ...
+    if((timestampReq > localTimestamp) ||
+        (timestampReq == localTimestamp && valueReq > localValue)) {
+        localValue = valueReq; // line 25
+        localTimestamp = timestampReq; // line 26
+    }
+    ...
+}
+\end{lstlisting}
+\caption{Timestamp update on write request}\label{fig:safety-timestamp-update}
+\end{figure}
+
+To read a value from the system, a process will first query a quorum of processes and wait for their
+responses. Once a quorum is reached, the process will select the value with the highest timestamp
+and then it will perform a write-back of this value to ensure that subsequent reads will not miss this value.
+This can be seen in figure \ref{fig:safety-read-response}. In order to ensure that the responders
+are unique, a set "readResponseSenders" is used to keep track of them.
+
+\begin{figure}[H]
+\begin{lstlisting}
+
+public void onReadResponse(ProcessMessage message) {
+    if(isCrashed || !isLaunched) return;
+    if(message.getSequenceNumber() != sequenceNumber) return;
+    if(readResponseSenders.contains(getSender())) return;
+    readResponseSenders.add(getSender());
+    // lines 9 and 18 (collect responses)
+    readResponses.add(message);
+    // majority reached lines 9 and 18
+    if(readResponseSenders.size() >= (N / 2) + 1){
+        int maxTs = Integer.MIN_VALUE;
+        int maxVal = Integer.MIN_VALUE;
+        for(ProcessMessage m: readResponses){
+            if(m.getTimestamp() > maxTs){
+                maxTs = m.getTimestamp(); // lines 10 and 19
+                maxVal = m.getValue(); // line 19
+            } else if (m.getTimestamp() == maxTs && m.getValue() > maxVal) {
+                maxVal = m.getValue(); // line 19
+            }
+        }
+        // lines 20-21: write-back
+        // handle onAck to return the value
+        }
+}
+\end{lstlisting}
+\caption{Read response handling}\label{fig:safety-read-response}
+\end{figure}
+
+Therefore, the impossibility of reading an old value after a new one has been successfully written is guaranteed
+by the intersection of the quorums (the one used in the write operation and the one used in the read operation),
+as well as the monotonically increasing timestamps.
+Fundamentally, the implementation defines a successful write operation as one that has been acknowledged
+by a strict majority of actors ($N/2 + 1$), ensuring that the new value and its associated higher timestamp
+are physically stored on more than half of the actors in the system. When a subsequent read operation
+is initiated, it is similarly required to query and receive responses from a majority of actors before
+proceeding. By the laws of set theory, the set of actors that stored the write and the set of nodes responding
+to the read must overlap by at least one actor. This overlapping actor acts holds
+the updated state. Since the code in onWriteRequest enforces that nodes only update their local storage
+if the incoming timestamp is strictly higher (or the value is larger for the same timestamp), this actor
+is guaranteed to possess and report the most recent timestamp. On the reader’s logic in onReadResponse
+there are aggregated all incoming messages and deterministically selects the value associated with the highest
+timestamp found (maxTs). Because the intersection actor is guaranteed to report the new, higher timestamp, the
+reader’s comparison logic will inevitably select this new value over any previous value reported by nodes
+that missed the most recent write.
+
+All in all linearizability is preserved and the safety property is satisfied.
 
 \subsection{Liveness}
 
-// Proof that if less than half of the processes crash, the system is still able to make progress
+To argue about liveness, we need to set the fact that the channel is reliable: the messages are
+eventually delivered without being duplicated.
 
+The implemented algorithm relies on the fundamental assumption that a majority of processes ($N/2 + 1$)
+remain reachable and correct. Despite a certain number of actors being set in a crashed state by main,
+the system continues always with a majority of correct and reachable processes in our testing scenarios.
+
+Each process in the system broadcasts it's ReadRequest and WriteRequest to the entire system of $N$ nodes,
+therefore it does not need to wait for any specific peer to respond; it only requires responses from
+any available majority. The broadcast of the message is done in the figure \ref{fig:liveness-broadcast}.
+The actorRefList is a list of all the ActorRef instances representing the other processes in the system.
+It is updated during the initialization phase when each actor is created.
+
+\begin{figure}[H]
+\begin{lstlisting}
+private void broadcastMessage(Object msg){
+    for (ActorRef actor : actorRefList) {
+        actor.tell(msg, self());
+    }
+}
+\end{lstlisting}
+\caption{Broadcasting read request}\label{fig:liveness-broadcast}
+\end{figure}
+
+The response collection mechanism can be reffered to in the figures \ref{fig:safety-output} and \ref{fig:safety-read-response}.
+where, depending on whether the expected response consists of [v', t', r] or [ack, v, t]. One can see
+that N/2 + 1 is a threshold that after is reached, the process can proceed to the next step, without needing to wait
+for any specific response. Once this threshold is met, the algorithm performs a finite number of computational
+steps to calculate the maximum timestamp or verify the write, guaranteeing that the operation terminates
+and the process proceeds to the next sequence number.
+
+The onReadRequest and onWriteRequest handlers are designed to be non-blocking and immediate.
+They can be refered in the following figure
+
+\begin{figure}[H]
+\begin{lstlisting}
+public void onWriteRequest(WriteRequest message){
+    if(isCrashed) return;
+    int timestampReq = message.getTimestamp();
+    int valueReq = message.getValue();
+    // line 24: if t' > localTS or (t' = localTS and v' > localValue)
+    if((timestampReq > localTimestamp) ||
+    (timestampReq == localTimestamp && valueReq > localValue))
+    {
+        localValue = valueReq; // line 25
+        localTimestamp = timestampReq; // line 26
+    }
+    // line 27: send [ack, v', t'] to p
+    getSender().tell(new Ack(valueReq, timestampReq), self());
+}
+
+public void onReadRequest(ReadRequest message){
+    if(isCrashed) return;
+    // line 29: send [localValue, localTimestamp, r'] to p_j
+    getSender().tell(new ProcessMessage(localValue,
+            localTimestamp, message.getSequenceNumber()), self());
+}
+\end{lstlisting}
+\caption{Read and write request handlers}\label{fig:liveness-request-handlers}
+\end{figure}
+
+
+There are no circular dependencies or deadlocks between actors. Consequently, as long as the network
+eventually delivers messages and the number of crashed nodes does not exceed the failure threshold ($f < N/2$),
+the accumulating responses in the initiator's readResponses or ackSenders collections will inevitably
+cross the quorum threshold.
 
 \subsection{Conclusion on correctness}
 
-If both safety and liveness are satisfied, then the system is argued to be correct.
+Correctness is demonstrated through two complementary properties: Safety and Liveness. Safety is preserved
+by the mathematical guarantee of quorum intersections combined with monotonic timestamps, ensuring that
+once a write is acknowledged by a majority, no subsequent read can return a stale value (Atomic Consistency).
+Liveness is maintained by the asynchronous, non-blocking nature of the actor model, which guarantees
+that operations will eventually complete provided that a majority of processes remain operational
+(tolerance of $f < N/2$ failures). Together, these mechanisms ensure that the distributed processes
+behave indistinguishably from a single, centralized shared memory, satisfying the sequential specification
+despite the underlying network asynchrony and node failures.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
