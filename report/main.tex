@@ -416,13 +416,17 @@ Performance evaluation of our implementation is based on measuring the time take
 and write operations to complete. There are multiple factors that can influence this time, such as
 the total number of processes in the system, the number of write and read operations.
 
-Our test suite is implemented such that N the number of processes in the system, f the number of
-failed processes and M the number of read and write operations can be configured before starting the
+\subsection{Experimental setup}
+
+Our test suite is implemented such that the number of processes in the system N, the number of
+failed processes f and the number of read and write operations M can be configured before starting the
 program. N is varied between 3, 10 and 100, while f is set to be equal to 1, 4 or 49. M is also varied
 between 3, 10 and 100.
 
-Table \ref{tab:performance-obtained} shows the results of our performance evaluation:
-\begin{table}[H]
+\subsection{Discussion}
+
+Table \ref{tab:performance-obtained} shows the results of our performance evaluation.
+\begin{table}
 \centering
 \begin{tabular}{|c|c|c|c|}
 \hline
@@ -443,6 +447,84 @@ Table \ref{tab:performance-obtained} shows the results of our performance evalua
 \end{tabular}
 \caption{Performance obtained}\label{tab:performance-obtained}
 \end{table}
+
+\begin{figure}
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/lat_vs_n.pdf}
+        \caption{Total latency as a function of number of processes ($N$)}
+        \label{fig:lat_vs_n}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{img/lat_vs_m.pdf}
+        \caption{Total latency as a function of number of operations per process ($M$)}
+        \label{fig:lat_vs_m}
+    \end{subfigure}
+    \caption{Latency as a function of number of processes and operations}
+    \label{fig:lat_vs_n_m}
+\end{figure}
+
+\textbf{Impact of number of processes}($N$):
+The number of nodes has a significant impact on performance. 
+As $N$ increases, the quorum size (majority required for read/write) increases. For $N=100$, a process must successfully exchange messages with at least 51 processes (versus 2 processes for $N=3$). This introduces higher network traffic and processing overhead.
+Comparing the $M=100$ case:
+\begin{itemize}
+    \item $N=3$: 113 ms
+    \item $N=100$: 1343 ms
+\end{itemize}
+The latency increases by an order of magnitude, reflecting the cost of communicating with a much larger quorum. 
+
+\textbf{Impact of Workload} ($M$):
+As expected, the latency increases with the number of operations $M$ (Figure \ref{fig:lat_vs_m}). 
+For example, in the $N=3$ configuration, increasing $M$ from 10 to 100 results 
+in a latency increase from 23ms to 113ms. This linear trend confirms that the individual operation processing time remains relatively stable even as the sequence of operations grows.
+It is worth noting that the performance penalty of increasing the system size from $N=3$ to $N=10$ is more pronounced for short workloads ($M=3, 10$) than for long workloads ($M=100$).
+
+\subsection{Conclusion}
+
+The implementation successfully scales to $N=100$ while maintaining correctness 
+in the presence of $f < N/2$ failures. While latency inevitably grows with $N$ 
+due to the mechanics of the ABD-like majority consensus9, the system remains responsive. 
+The experiments confirm that the protocol correctly handles the trade-off between fault 
+tolerance and performance latency.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% 5. Conclusion
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+
+
+
+
+\subsection{Conclusion}
+
+The implementation successfully scales to $N=100$ while maintaining correctness 
+in the presence of $f < N/2$ failures. While latency inevitably grows with $N$ 
+due to the mechanics of the ABD-like majority consensus9, the system remains responsive. 
+The experiments confirm that the protocol correctly handles the trade-off between fault 
+tolerance and performance latency.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% 5. Conclusion
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+
+\subsection{Conclusion}
+
+The implementation successfully scales to $N=100$ while maintaining correctness 
+in the presence of $f < N/2$ failures. While latency inevitably grows with $N$ 
+due to the mechanics of the ABD-like majority consensus9, the system remains responsive. 
+The experiments confirm that the protocol correctly handles the trade-off between fault 
+tolerance and performance latency.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
