@@ -1,5 +1,5 @@
 
-.PHONY: all compile run benchmark clean
+.PHONY: all compile run benchmark clean check
 
 # Use '>' instead of TAB to start recipe lines
 .RECIPEPREFIX := >
@@ -64,3 +64,18 @@ benchmark: compile
 
 clean:
 > rm -rf target/* benchmark_results.csv
+
+# Generic linearizability check using Python script and KVLogger
+# Usage examples:
+#   make check N=3 F=1 M=3
+#   make check N=10 F=4 M=100
+# Defaults: N=3, F=1, M=3
+N ?= 3
+F ?= 1
+M ?= 3
+
+check: compile
+> @echo "Running linearizability check (N=$(N), f=$(F), M=$(M))..."
+> python3 ../../tools/linearizability_checker.py --run-java -N $(N) -f $(F) -M $(M) --kvlog logs_N$(N)_M$(M)_java.txt --out logs_N$(N)_M$(M).check.txt
+> @echo "Log: ../../logs_N$(N)_M$(M)_java.txt"
+> @echo "Summary: ../../logs_N$(N)_M$(M).check.txt"
