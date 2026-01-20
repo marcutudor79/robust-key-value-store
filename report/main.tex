@@ -324,6 +324,18 @@ that missed the most recent write.
 
 All in all linearizability is preserved and the safety property is satisfied.
 
+\subsection{Linearizability validation}
+
+We validate linearizability by extracting an execution history from the actor logs and deciding whether there exists a total order consistent with real-time and the atomic single-register specification. Each operation is characterized by its type (put/get), value and the interval between invocation and completion. We define a precedence relation with an edge \(o_i \to o_j\) whenever \(\operatorname{end}(o_i) \le \operatorname{start}(o_j)\); any linearization must extend this partial order. The decision procedure enforces the specification: puts update the register at their position in the total order and gets return the latest value preceding them.
+
+For small histories, we use an exact search that extends the precedence relation to a total order satisfying the specification. For larger histories, we apply a scalable check for reads: for a read \(r\) returning value \(v\), (i) some write of \(v\) must have completed no later than \(\operatorname{end}(r)\); and (ii) no write of a strictly larger value may have completed before \(\operatorname{start}(r)\). This criterion is consistent with ABD-style timestamp monotonicity and value tie-breaking.
+
+Instrumentation records one invocation and one completion event per operation at the points where sequence numbers advance and where quorums are reached. Logging is enabled without changing behavior via \verb|KV_LOG| or \verb|-Dkv.log|.
+
+For the case when having \(N=3, f=1, M=3\), a typical trace includes a completed put of 4, a completed read returning 4 and a completed put of 7. A valid linearization is \([\mathrm{Put}(4)] < [\mathrm{Get}(4)] < [\mathrm{Put}(7)]\): the read is placed after the first put and before the second, so it returns 4, which matches the log. In runs where two puts overlap, the read is placed according to real-time and returns the value written by the put with the maximal (timestamp, value) among the completed writes preceding it. Across our baseline executions with \(N=3, f=1, M=3\), all histories satisfied these conditions, so the instance is linearizable.
+
+For larger randomized scenarios, the validator either certifies linearizability or identifies a read whose returned value cannot be justified by the completed writes under the real-time constraints, aiding inspection of the run and the logging alignment.
+
 \subsection{Liveness}
 
 To argue about liveness, we need to set the fact that the channel is reliable: the messages are
