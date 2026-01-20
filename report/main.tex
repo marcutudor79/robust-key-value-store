@@ -413,19 +413,16 @@ despite the underlying network asynchrony and node failures.
 \section {Performance evaluation}
 
 Performance evaluation of our implementation is based on measuring the time taken for all the read
-and write operations to complete. There are multiple factors that can influence this time, such as
-the total number of processes in the system, the number of write and read operations.
+and write operations to complete. There are multiple factors that can influence this time, such as the total number of processes in the system and the number of write and read operations.
 
 \subsection{Experimental setup}
 
-Our test suite is implemented such that the number of processes in the system N, the number of
-failed processes f and the number of read and write operations M can be configured before starting the
-program. N is varied between 3, 10 and 100, while f is set to be equal to 1, 4 or 49. M is also varied
-between 3, 10 and 100.
+Our test suite is implemented such that the number of processes in the system N, the number of failed processes f and the number of read and write operations M can be configured before starting the
+program. N is varied between 3, 10 and 100, while f is set to be equal to 1, 4 or 49. M is also varied between 3, 10 and 100.
+Table \ref{tab:performance-obtained} presents the complete set of tested configurations and the corresponding latency results.
 
 \subsection{Discussion}
 
-Table \ref{tab:performance-obtained} shows the results of our performance evaluation.
 \begin{table}
 \centering
 \begin{tabular}{|c|c|c|c|}
@@ -469,19 +466,25 @@ Table \ref{tab:performance-obtained} shows the results of our performance evalua
 
 \textbf{Impact of number of processes}($N$):
 The number of nodes has a significant impact on performance. 
-As $N$ increases, the quorum size (majority required for read/write) increases. For $N=100$, a process must successfully exchange messages with at least 51 processes (versus 2 processes for $N=3$). This introduces higher network traffic and processing overhead.
-Comparing the $M=100$ case:
+As $N$ increases, the quorum size (majority required for read/write) increases proportionally. For $N=100$, a process must successfully exchange messages with at least 51 processes (versus 2 processes for $N=3$). 
+This leads to higher network traffic and forces the process to wait for a larger set of responses (increasing the probability of waiting for slower nodes).
+Comparing the results for a high workload ($M=100$):
 \begin{itemize}
     \item $N=3$: 113 ms
     \item $N=100$: 1343 ms
 \end{itemize}
 The latency increases by an order of magnitude, reflecting the cost of communicating with a much larger quorum. 
+It is worth noting that the performance penalty of increasing the system size from $N=3$ to $N=10$ is more pronounced for short workloads ($M=3, 10$) than for long workloads ($M=100$).
+Comparing the transition from $N=3$ to $N=10$, we observe that the latency growth factor decreases as the workload $M$ increases.
+Specifically, for a moderate workload ($M=10$), the latency grows by a factor of $\approx 3.4\times$ (from 23ms to 79ms). However, for a heavier workload ($M=100$), the growth factor drops to $\approx 1.8\times$ (from 113ms to 201ms).
+This indicates that the overhead of increasing the system size is heavily front-loaded in the initialization phase (actor creation and network setup), which scales poorly with $N$.
+In contrast, the operational phase (quorum communication) scales efficiently due to asynchronous message passing.
+Consequently, as $M$ increases, the total execution time becomes increasingly dominated by the efficient operational phase, thereby strictly reducing the relative performance penalty of scaling up the system size.
 
 \textbf{Impact of Workload} ($M$):
 As expected, the latency increases with the number of operations $M$ (Figure \ref{fig:lat_vs_m}). 
 For example, in the $N=3$ configuration, increasing $M$ from 10 to 100 results 
 in a latency increase from 23ms to 113ms. This linear trend confirms that the individual operation processing time remains relatively stable even as the sequence of operations grows.
-It is worth noting that the performance penalty of increasing the system size from $N=3$ to $N=10$ is more pronounced for short workloads ($M=3, 10$) than for long workloads ($M=100$).
 
 \subsection{Conclusion}
 
@@ -490,6 +493,17 @@ in the presence of $f < N/2$ failures. While latency inevitably grows with $N$
 due to the mechanics of the ABD-like majority consensus9, the system remains responsive. 
 The experiments confirm that the protocol correctly handles the trade-off between fault 
 tolerance and performance latency.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% 5. Conclusion
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+
+
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
