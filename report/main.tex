@@ -13,7 +13,6 @@
 \usepackage{float}
 \usepackage[justification=centering]{caption}
 \usepackage{subcaption} % provides the subfigure environment
-\usepackage{listings}
 \usepackage{amsmath}
 \usepackage{listings}
 
@@ -98,18 +97,14 @@
 
 In this project we are proposing an implementation for the robust key-value store problem in a distributed
 system. Our design is based on Akka, which is a middleware that allows to easily create actor based
-systems in Java. The ideea is to be able to simulate multiple nodes of the system on a single machine
+systems in Java. The idea is to be able to simulate multiple nodes of the system on a single machine
 using multiple actors in the Akka framework. Java 8 jdk can be used to compile and run the project with
 Maven as a build tool.
 
 The implementation is split into multiple classes, each one having a specific role in the system.
-One of the most important is the Process.java, which contains the behaviour described in the pseudocode
-presented in the project description. The main class is responsible for creating the actors, setting
-some of them to a crashed state and starting the read and write operations.
+A core component of the implementation is the \texttt{Process.java} class, which encapsulates the behaviour described in the provided pseudocode \cite{abd}. The main class is responsible for bootstrapping the system: creating the actors, simulating crash failures by setting specific actors to a silent state, and triggering the read and write operation sequences.
 
-Our system is fault tolerant to actors crashing, as long as their number is less then a half. If the
-number of crashes exceeds this limit, the system is not able to guarantee the correctness, due to the
-posibility of having partitions.
+Our system provides fault tolerance against process crashes, provided that the number of faulty processes $f$ satisfies $f < N/2$. If the number of crashes exceeds this threshold, the liveness and safety properties cannot be guaranteed, as a quorum (majority) may no longer be obtainable.
 
 The implementation is tested with multiple scenarios, varying the number of processes in the system,
 the number of crashed processes and the number of read and write operations. This is done by the means
@@ -145,10 +140,9 @@ The system exports two operations:
 
 - put(k, v) sets the value with key k to v (overwriting the old value if it is already in the set).
 
-- get(k) returns the value of key k (the default value $\bot$ is returned is the key is not at the system).
+- get(k) returns the value of key k (the default value $\bot$ is returned if the key is not in the system).
 
-A constraint to be taken into consideration is that put and get operations will always be invoked
-on the same key k = 0. This is done in order to simplify the implementation.
+A constraint to be taken into consideration is that \texttt{put} and \texttt{get} operations will always be invoked on a fixed key $k=1$, effectively reducing the problem to implementing a single multi-writer multi-reader atomic register, as suggested in the project guidelines.
 
 \subsection{Actor behaviour description}
 
@@ -159,12 +153,7 @@ responses, computes its new timestamp as t = tmax + 1 and sends a write request 
 in the system. The operation completes as soon as responses of the type [ack, v, t] are received
 from a quorum.
 
-To read the register value, a reader increments its sequence number r and sends a read
-request [?, r] to every all the processes. As soon as responses of the type [v', t', r] are received
-from a quorum, the operation selects the value $v_m$ equipped with the highest timestamp $t_m$. If there are
-multiple different values written with timestamp $t_m$, the largest such value is chosen. To make sure
-that subsequent read operations will not “miss” the returned value, the reader then sends a write request
-[$v_m$, $t_m$], waits until a quorum conﬁrms it by sending [ack, $v_m$, $t_m$], and only then returns v.
+To read the register value, a reader increments its sequence number $r$ and broadcasts a read request $[?, r]$ to all processes. As soon as responses of the type $[v', t', r]$ are received from a quorum, the operation selects the value $v_m$ associated with the highest timestamp $t_m$. If there are multiple distinct values with timestamp $t_m$, the largest value is chosen to ensure determinism. To ensure linearizability (specifically, that subsequent reads do not return an older value), the reader performs a \textit{write-back} phase: it sends a write request $[v_m, t_m]$, waits until a quorum confirms it by sending $[ack, v_m, t_m]$, and only then returns $v_m$.
 
 Notice that, as multiple values can be written with the same timestamp, the value is attached to the
 acknowledgement sent to a write request. This is needed to ensure that the acknowledgement is indeed
@@ -181,20 +170,20 @@ Each actor can be in a crashed or launched state. If it is crashed, it will not 
 messages. This is done by saving a boolean isCrashed variable in the actor state, which is checked
 at the beginning of each message handler.
 
-The behaviour of the actors is defined by event handlers, that being, the acions taken are event
-driven. When a message is received, the corresponding handler is executed. It is not a good ideea
+The behaviour of the actors is defined by event handlers, that being, the actions taken are event
+driven. When a message is received, the corresponding handler is executed. It is not a good idea
 to block the actor while waiting the responses, so, instead, the responses are collected in a list
 and when the number of responses reaches a quorum, the actor can proceed to the next step.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% 3. Proof of correcteness
+% 3. Proof of correctness
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \newpage
 \section{Proof of correctness}
 
-In order to prove the correcteness of our implementation, we need to show that it satisfies both
+In order to prove the correctness of our implementation, we need to show that it satisfies both
 safety and liveness properties. Technically, most of the implementation is part of the Process.java
 file, which contains the actor behaviour. The main logic is there to handle
 actor creation, actor crashing and actor start. This does not affect the correctness of the system,
@@ -216,7 +205,7 @@ then the safety property is satisfied. Therefore,
 the attention for the safety proof is shifting towards the parts of the implementation where an output
 value is returned. In our case, this happens in two places, depending on whether the operation is a
 write or a read. Figure \ref{fig:safety-output} shows a code snippet in which the output is returned
-as a log message from the Process.java class. The lines addonations are added in order to easily link
+as a log message from the Process.java class. The lines comments are added in order to easily link
 the implementation in java to the pseudocode presented in the project description.
 
 \begin{figure}[H]
@@ -264,10 +253,7 @@ public void onAck(Ack ack){
 \caption{Majority check for write}\label{fig:safety-output}
 \end{figure}
 
-Now assuming that a quorum of processes have acknowledged the write operation, we can be sure that at
-when a process reads, it is guaranteed to query at least one process that participated in the most
-recent successful write. This prevents the reader from returning on old value. However, this is not
-sufficient to guarantee that no new-old inversion happens.
+Assuming that a quorum of processes have acknowledged a write operation, any subsequent read operation is guaranteed to query at least one process that participated in that most recent successful write. This is due to the property of \textit{Quorum Intersection}: any two majority sets must have a non-empty intersection ($W \cap R \neq \emptyset$). Consequently, the reader will observe the most recent timestamp/value pair. However, to strictly satisfy atomicity and prevent new-old inversion (where a later read returns an older value than an earlier read), the write-back phase described in the pseudocode is essential.
 
 The timestamps used for writes need to be monotonically increasing. A process only updates its local
 state if the incoming information is "newer" (higher timestamp) or "larger" (tie-breaking by value).
@@ -325,13 +311,13 @@ public void onReadResponse(ProcessMessage message) {
 \caption{Read response handling}\label{fig:safety-read-response}
 \end{figure}
 
-Notice that every read operation can be ordered in the history of the system, right after it's corresponding
-write operation. This is because it's output is timestamped, so the history will reflect the one
+Notice that every read operation can be ordered in the history of the system, right after its corresponding
+write operation. This is because its output is timestamped, so the history will reflect the one
 of an atomic register.
 
 The only way to violate the sequential specification would be to reverse the order of a write and
-read operation. Assuming that a read operation precedes a write operation, it's timestamp must
-be less then then write operation timestamp, therefore the read cannot return the value written
+read operation. Assuming that a read operation precedes a write operation, its timestamp must
+be less than the write operation timestamp, therefore the read cannot return the value written
 by the write operation. If the write operation precedes the read operation, then the read operation
 must query at least one process that participated in the write operation, therefore it cannot
 return an old value.
@@ -345,7 +331,7 @@ We validate linearizability by extracting an execution history from the actor lo
 
 For small histories, we use an exact search that extends the precedence relation to a total order satisfying the specification. For larger histories, we apply a scalable check for reads: for a read \(r\) returning value \(v\), (i) some write of \(v\) must have completed no later than \(\operatorname{end}(r)\); and (ii) no write of a strictly larger value may have completed before \(\operatorname{start}(r)\). This criterion is consistent with ABD-style timestamp monotonicity and value tie-breaking.
 
-Instrumentation records one invocation and one completion event per operation at the points where sequence numbers advance and where quorums are reached. Logging is enabled without changing behavior via \verb|KV_LOG| or \verb|-Dkv.log|.
+Instrumentation records one invocation and one completion event per operation at the points where sequence numbers advance and where quorums are reached. Logging is enabled without changing behaviour via \verb|KV_LOG| or \verb|-Dkv.log|.
 
 For the case when having \(N=3, f=1, M=3\), a typical trace includes a completed put of 4, a completed read returning 4 and a completed put of 7. A valid linearization is \([\mathrm{Put}(4)] < [\mathrm{Get}(4)] < [\mathrm{Put}(7)]\): the read is placed after the first put and before the second, so it returns 4, which matches the log. In runs where two puts overlap, the read is placed according to real-time and returns the value written by the put with the maximal (timestamp, value) among the completed writes preceding it. Across our baseline executions with \(N=3, f=1, M=3\), all histories satisfied these conditions, so the instance is linearizable.
 
@@ -360,7 +346,7 @@ The implemented algorithm relies on the fundamental assumption that a majority o
 remain reachable and correct. Despite a certain number of actors being set in a crashed state by main,
 the system continues always with a majority of correct and reachable processes in our testing scenarios.
 
-Each process in the system broadcasts it's ReadRequest and WriteRequest to the entire system of $N$ nodes,
+Each process in the system broadcasts its ReadRequest and WriteRequest to the entire system of $N$ nodes,
 therefore it does not need to wait for any specific peer to respond; it only requires responses from
 any available majority. Eventually, a response will come from a majority, so each read and write operation
 will eventually complete.
@@ -376,7 +362,7 @@ private void broadcastMessage(Object msg){
 \caption{Broadcasting read request}\label{fig:liveness-broadcast}
 \end{figure}
 
-The response collection mechanism can be reffered to in the figures \ref{fig:safety-output} and \ref{fig:safety-read-response}.
+The response collection mechanism is illustrated in Figures \ref{fig:safety-output} and \ref{fig:safety-read-response}.
 where, depending on whether the expected response consists of [v', t', r] or [ack, v, t]. One can see
 that N/2 + 1 is a threshold that after is reached, the process can proceed to the next step, without needing to wait
 for any specific response. Once this threshold is met, the algorithm performs a finite number of computational
@@ -384,7 +370,7 @@ steps to calculate the maximum timestamp or verify the write, guaranteeing that 
 and the process proceeds to the next sequence number.
 
 The onReadRequest and onWriteRequest handlers are designed to be non-blocking and immediate.
-They can be refered in the following figure
+They can be referred to in the following figure
 
 \begin{figure}[H]
 \begin{lstlisting}
@@ -510,8 +496,7 @@ Comparing the results for a high workload ($M=100$):
     \item $N=100$: 1343 ms
 \end{itemize}
 The latency increases by an order of magnitude, reflecting the cost of communicating with a much larger quorum.
-It is worth noting that the performance penalty of increasing the system size from $N=3$ to $N=10$ is more pronounced for short workloads ($M=3, 10$) than for long workloads ($M=100$).
-Comparing the transition from $N=3$ to $N=10$, we observe that the latency growth factor decreases as the workload $M$ increases.
+It is worth noting that the performance penalty of increasing the system size from $N=3$ to $N=10$ is more pronounced for short workloads ($M=3, 10$) than for long workloads ($M=100$). As $M$ increases, the initial overhead of actor creation and network setup is amortized over a larger number of operations. Consequently, the total execution time becomes increasingly dominated by the efficient asynchronous operational phase.
 Specifically, for a moderate workload ($M=10$), the latency grows by a factor of $\approx 3.4\times$ (from 23ms to 79ms). However, for a heavier workload ($M=100$), the growth factor drops to $\approx 1.8\times$ (from 113ms to 201ms).
 This indicates that the overhead of increasing the system size is heavily front-loaded in the initialization phase (actor creation and network setup), which scales poorly with $N$.
 In contrast, the operational phase (quorum communication) scales efficiently due to asynchronous message passing.
@@ -519,7 +504,7 @@ Consequently, as $M$ increases, the total execution time becomes increasingly do
 
 Also, a point of interest is the logging mechanism that is used to return the invoke and complete
 events for each operation. This is done in order to be able to validate linearizability of the system.
-However, logging introduces overhead in terms of tens of tens of miliseconds per total run when
+However, logging introduces overhead in terms of tens of milliseconds per total run when
 the number of operations is low (M=3 or M=10).
 
 
@@ -540,18 +525,21 @@ the number of operations is low (M=3 or M=10).
 
 \section{Conclusion}
 
-To conclude our report, we can say that our implementation of a robust key-value store in a distributed
-system is able to satisfy both safety and liveness properties, making it a reliable solution for
-storing and retrieving data in a distributed environment. The use of Akka as a middleware allowed us
-to easily create an actor-based system that can handle multiple clients concurrently, while also
-being fault-tolerant to actor crashes. Overall, our project demonstrates the feasibility of building
-a robust key-value store in a distributed system.
+In this project, we successfully implemented a robust, distributed key-value store using the Akka framework. By adhering to the ABD algorithm principles, our system guarantees linearizability (safety) and eventual termination (liveness) in the presence of crash failures, provided that a majority of processes remain correct ($f < N/2$).
 
-From the point of view of performance, the implementation shows good scalability characteristics.
-From $N=3$ to $N=100$ while maintaining correctness in the presence of $f < N/2$ failures, the
-performance penalty is acceptable for the increased fault tolerance. The latency inevitably grows
-with $N$ due to the mechanics of the ABD-like majority consensus, the system remains responsive.
-The experiments confirm that the protocol correctly handles the trade-off between fault
-tolerance and performance latency.
+Our performance evaluation demonstrates that while the latency of operations inherently increases with the system size $N$ due to larger quorum requirements, the system remains responsive. We observed that the overhead is largely dominated by initialization costs in smaller workloads, but the system scales efficiently for larger batches of operations. The experimental results validate that our implementation correctly balances the trade-off between strict consistency and the latency costs associated with distributed consensus.
 
-\end{document}
+\newpage
+\begin{thebibliography}{9}
+
+\bibitem{abd}
+H. Attiya, A. Bar-Noy, and D. Dolev.
+``Sharing memory robustly in message passing systems.''
+\textit{Journal of the ACM}, 42(2):124--142, Jan. 1995.
+
+\bibitem{course}
+P. Kuznetsov.
+``Storage in message passing systems.''
+\textit{CSC\_4SL05\_TP/SLR206 Lecture Slides}, Télécom Paris, 2025.
+
+\end{thebibliography}
