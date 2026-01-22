@@ -168,7 +168,7 @@ All actors in the system are instances running the Process.java class. Each acto
 timestamp and a local value. There is no shared memory between the actors, the system relies on message
 passing for inter actor communication. However, as a whole, the system behaves as a single shared memory.
 
-Each actor can be in a crashed or launched state. If it is crashed, it will not respond to any any
+Each actor can be in a crashed or launched state. If it is crashed, it will not respond to any
 messages. This is done by saving a boolean isCrashed variable in the actor state, which is checked
 at the beginning of each message handler.
 
