@@ -41,6 +41,9 @@ public class Process extends AbstractActor {
     private int currentOpTimestamp;
     private int currentOpValue; // ADDED: To verify Ack value
     private boolean isWrite;
+    // true between sending [v, t] (lines 12 and 20) and the end of the operation:
+    // read responses only count before it, acks only during it
+    private boolean inWritePhase = false;
     // REPLACED 'int ackCount' with Set to handle duplicates/robustness
     private Set<ActorRef> ackSenders = new HashSet<>();
     // REPLACED List-only logic with Set to handle duplicates
@@ -117,6 +120,9 @@ public class Process extends AbstractActor {
     (i.e., the highest timestamp) and broadcasts the write request. */
     public void onReadResponse(ProcessMessage message) {
         if(isCrashed || !isLaunched) return;
+        // a late response after the majority must not start the write phase again,
+        // nor once all the operations are done (sequenceNumber no longer moves then)
+        if(inWritePhase || operationsCompleted == M*2) return;
         if(message.getSequenceNumber() != sequenceNumber) return;
         // FIXED: Count unique senders only
         if (readResponseSenders.contains(getSender())) return;
@@ -148,6 +154,7 @@ public class Process extends AbstractActor {
             }
             currentOpTimestamp = sendTimestamp;
             currentOpValue = sendValue; // SAVE value to verify Ack later
+            inWritePhase = true;
             // lines 12 and 20: send [v, t] to all
             broadcastMessage(new WriteRequest(sendValue, sendTimestamp));
         }
@@ -172,6 +179,9 @@ public class Process extends AbstractActor {
     /* Counts ACKs to verify that the value has been safely stored on a majority of nodes. */
     public void onAck(Ack ack){
         if (isCrashed || !isLaunched) return;
+        // an ack received before [v, t] was sent belongs to an earlier operation
+        // (currentOpTimestamp/Value still hold its pair): it must not count
+        if (!inWritePhase) return;
         // FIXED: Validate Timestamp AND Value (Safety Violation Fix)
         if (ack.getTimestamp() != currentOpTimestamp) return;
         if (ack.getValue() != currentOpValue) return;
@@ -201,6 +211,8 @@ public class Process extends AbstractActor {
         /*8.REQ Upon receiving the LaunchMessage, the process starts executing put and get operations:
         - M put operations with k = 1 and v = i, N+i, 2N+i, ... MN+i
         - M get operations for k = 1 */
+        // the previous operation is over: its late acks must not count, even after the last one
+        inWritePhase = false;
         if(operationsCompleted == M*2){
             String line = processName + ": " + "all operations completed";
             log.info(line);
